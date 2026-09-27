@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="TARSIS Sample GPX" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Tubigon Sample Farm Plot</name>
+    <time>2026-09-13T08:00:00Z</time>
+  </metadata>
+  <wpt lat="9.9515200" lon="123.9618100">
+    <ele>12.4</ele>
+    <time>2026-09-13T08:05:00Z</time>
+    <name>Sample Farm Marker</name>
+    <desc>Single waypoint near Tubigon poblacion for upload testing.</desc>
+    <sym>Flag</sym>
+  </wpt>
+  <trk>
+    <name>Sample Plot Boundary</name>
+    <trkseg>
+      <trkpt lat="9.9531000" lon="123.9599000">
+        <ele>10.2</ele>
+        <time>2026-09-13T08:10:00Z</time>
+      </trkpt>
+      <trkpt lat="9.9534500" lon="123.9606500">
+        <ele>10.8</ele>
+        <time>2026-09-13T08:11:00Z</time>
+      </trkpt>
+      <trkpt lat="9.9528500" lon="123.9610500">
+        <ele>11.1</ele>
+        <time>2026-09-13T08:12:00Z</time>
+      </trkpt>
+      <trkpt lat="9.9525000" lon="123.9602500">
+        <ele>10.6</ele>
+        <time>2026-09-13T08:13:00Z</time>
+      </trkpt>
+      <trkpt lat="9.9531000" lon="123.9599000">
+        <ele>10.2</ele>
+        <time>2026-09-13T08:14:00Z</time>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>

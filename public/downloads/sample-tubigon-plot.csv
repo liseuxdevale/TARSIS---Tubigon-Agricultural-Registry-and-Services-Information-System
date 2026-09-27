@@ -1,0 +1,7 @@
+plot_name,point_type,sequence_order,latitude,longitude,elevation,date_recorded
+Sample Farm Marker,waypoint,,9.9515200,123.9618100,12.4,2026-09-13T08:05:00Z
+Sample Plot Boundary,track_point,1,9.9531000,123.9599000,10.2,2026-09-13T08:10:00Z
+Sample Plot Boundary,track_point,2,9.9534500,123.9606500,10.8,2026-09-13T08:11:00Z
+Sample Plot Boundary,track_point,3,9.9528500,123.9610500,11.1,2026-09-13T08:12:00Z
+Sample Plot Boundary,track_point,4,9.9525000,123.9602500,10.6,2026-09-13T08:13:00Z
+Sample Plot Boundary,track_point,5,9.9531000,123.9599000,10.2,2026-09-13T08:14:00Z
