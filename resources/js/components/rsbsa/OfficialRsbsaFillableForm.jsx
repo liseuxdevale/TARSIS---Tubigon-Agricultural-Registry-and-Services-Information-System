@@ -45,6 +45,7 @@ function TemplatePage({ page, calibration, showGrid, children }) {
 
 function PageOne({ registrant, payload }) {
     const barangay = registrant.barangay?.name || payload.barangay_name || '';
+    const addressTopNudge = 0.35;
     const placeOfBirth = [payload.birth_municipality, payload.birth_province, payload.birth_country];
     const emergencyContact = digits(payload.emergency_contact);
     const farmingIncome = peso(payload.gross_farming_income);
@@ -72,12 +73,12 @@ function PageOne({ registrant, payload }) {
             <Mark left={77.25} top={23.61} checked={registrant.sex === 'Male'} />
             <Mark left={85.40} top={23.61} checked={registrant.sex === 'Female'} />
 
-            <Fill value={payload.address_line} left={11.75} top={25.65} width={26.65} height={1.18} center fit scale={1.0}  />
-            <Fill value={payload.street} left={40.1} top={25.55} width={26.6} height={1.18} center fit scale={1.0} />
-            <Fill value={barangay} left={68.3} top={25.55} width={26.7} height={1.18} center fit scale={1.0} />
-            <Fill value={payload.municipality} left={11.75} top={28.75} width={26.65} height={1.18} center fit scale={1.0}  />
-            <Fill value={payload.province} left={40.1} top={28.75} width={26.6} height={1.18} center fit scale={1.0}  />
-            <Fill value={payload.region} left={68.3} top={28.75} width={26.7} height={1.18} center fit scale={1.0}  />
+            <Fill value={payload.address_line} left={11.75} top={25.65 + addressTopNudge} width={26.65} height={1.18} center fit scale={1.0}  />
+            <Fill value={payload.street} left={40.1} top={25.55 + addressTopNudge} width={26.6} height={1.18} center fit scale={1.0} />
+            <Fill value={barangay} left={68.3} top={25.55 + addressTopNudge} width={26.7} height={1.18} center fit scale={1.0} />
+            <Fill value={payload.municipality} left={11.75} top={28.75 + addressTopNudge} width={26.65} height={1.18} center fit scale={1.0}  />
+            <Fill value={payload.province} left={40.1} top={28.75 + addressTopNudge} width={26.6} height={1.18} center fit scale={1.0}  />
+            <Fill value={payload.region} left={68.3} top={28.75 + addressTopNudge} width={26.7} height={1.18} center fit scale={1.0}  />
 
             <Segmented value={digits(registrant.phone)} count={11} left={5.35} top={32.85} width={20.0} height={1.05} />
             <Segmented value={digits(payload.landline)} count={10} left={29.5} top={32.85} width={18.35} height={1.05} />
@@ -89,7 +90,7 @@ function PageOne({ registrant, payload }) {
             <Mark left={13.7} top={40.55} checked={payload.religion === 'Christianity'} />
             <Mark left={23.55} top={40.55} checked={payload.religion === 'Islam'} />
             <Mark left={29.60} top={40.55} checked={payload.religion === 'Others'} />
-            {payload.religion === 'Others' && <Fill value={payload.religion_other} left={39.4} top={40.0} width={8.9} height={1.0} fit scale={0.60} />}
+            {payload.religion === 'Others' && <Fill value={payload.religion_other} left={39.9} top={40.2} width={8.9} height={1.0} scale={1.0} />}
             <MappedMark value={registrant.civil_status} positions={civilStatusMarks} />
             {registrant.civil_status === 'Married' && <Fill value={payload.spouse_name} left={24.0} top={44.75} width={24.6} height={1.25} fit scale={1.1} />}
             <Fill value={payload.mother_maiden_name} left={23.5} top={48.1} width={25.05} height={1.25} fit scale={1.1} />
@@ -245,6 +246,7 @@ function ParcelOverlay({ parcel, index }) {
         [-0.15, -0.15, -0.15, -0.15, -0.15], // Parcel 3
     ];
     const commodityRowNudges = commodityRowNudgesByParcel[index] || commodityRowNudgesByParcel[0];
+    const commodityValueTopNudge = 0.85;
 
     // Per-parcel Ownership "Others" specify text  position — fully independent per parcel.
     // Each parcel has its own dedicated position object below — edit only the one for the
@@ -281,7 +283,7 @@ function ParcelOverlay({ parcel, index }) {
         <>
             <Fill value={parcel.location_barangay} left={14.8} top={top + locationTopAdjustment - 1.2} width={29.5} height={1.05} center />
             <Fill value={parcel.location_municipality} left={14.8} top={top + locationTopAdjustment + .10} width={29.5} height={1.05} center />
-            <Fill value={parcel.total_area} left={totalAreaPos.left} top={totalAreaPos.top} width={3.4} height={1.0} center fit scale = {0.88}/>
+            <Fill value={formatArea(parcel.total_area)} left={totalAreaPos.left} top={totalAreaPos.top} width={3.4} height={1.0} center fit scale = {0.88}/>
             <YesNoMarks value={parcel.ancestral_domain} yes={ancestralDomainMarks.yes} no={ancestralDomainMarks.no} />
             <Fill value={parcel.ownership_document_number} left={ownershipDocNoPos.left} top={ownershipDocNoPos.top} width={3.9} height={1.0} center fit scale = {0.88} />
             <YesNoMarks value={parcel.agrarian_reform_beneficiary} yes={agrarianReformMarks.yes} no={agrarianReformMarks.no} />
@@ -292,12 +294,12 @@ function ParcelOverlay({ parcel, index }) {
                 const rowTop = commodityGrid.top + row * commodityGrid.rowHeight + (commodityRowNudges[row] || 0);
                 return (
                     <React.Fragment key={row}>
-                        <Fill value={commodity.commodity} left={46.25} top={rowTop + .35} width={12.0} height={1.65} center fit scale={0.88} />
-                        <Fill value={commodity.size} left={58.7} top={rowTop + .35} width={6.0} height={1.65} center fit scale={1.0} />
-                        <Fill value={commodity.heads} left={65.2} top={rowTop + .35} width={6.0} height={1.65} center fit scale={1.0} />
-                        <Fill value={commodity.farm_type} left={72.0} top={rowTop + .35} width={6.9} height={1.65} center fit scale={1.0} />
-                        <Fill value={organicValue(commodity.organic_practitioner)} left={79.3} top={rowTop + .35} width={6.6} height={1.65} center fit scale={1.0} />
-                        <Fill value={commodity.remarks} left={86.25} top={rowTop + .35} width={9.0} height={1.65} center fit scale={1.0} />
+                        <Fill value={commodity.commodity} left={46.25} top={rowTop + commodityValueTopNudge} width={12.0} height={1.65} center fit scale={0.88} />
+                        <Fill value={formatArea(commodity.size)} left={58.7} top={rowTop + commodityValueTopNudge} width={6.0} height={1.65} center fit scale={1.0} />
+                        <Fill value={commodity.heads} left={65.2} top={rowTop + commodityValueTopNudge} width={6.0} height={1.65} center fit scale={1.0} />
+                        <Fill value={commodity.farm_type} left={72.0} top={rowTop + commodityValueTopNudge} width={6.9} height={1.65} center fit scale={1.0} />
+                        <Fill value={organicValue(commodity.organic_practitioner)} left={79.3} top={rowTop + commodityValueTopNudge} width={6.6} height={1.65} center fit scale={1.0} />
+                        <Fill value={commodity.remarks} left={86.25} top={rowTop + commodityValueTopNudge} width={9.0} height={1.65} center fit scale={1.0} />
                     </React.Fragment>
                 );
             })}
@@ -332,6 +334,12 @@ function LivelihoodMarks({ value }) {
 function selectedValues(value) {
     if (Array.isArray(value)) return value;
     return value ? [value] : [];
+}
+
+function formatArea(value) {
+    if (value === null || value === undefined || value === '') return '';
+    const number = Number(value);
+    return Number.isFinite(number) ? number.toFixed(2) : String(value);
 }
 
 function Fill({ value, left, top, width, height, center = false, right = false, prominent = false, fit = false, compact = false, multiline = false, scale }) {
@@ -478,5 +486,5 @@ function autoFitScale(value, width, prominent = false) {
     const capacity = Math.max(4, width * (prominent ? 0.82 : 1.08));
     if (textLength <= capacity) return 1;
 
-    return Math.max(0.58, Math.min(1, capacity / textLength));
+    return Math.max(0.66, Math.min(1, capacity / textLength));
 }

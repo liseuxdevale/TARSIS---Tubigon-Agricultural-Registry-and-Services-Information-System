@@ -37,7 +37,7 @@ function RegistrantProfile({ profile, digitalId, publicView }) {
                         <InfoRow label="Status" value={status} />
                         <InfoRow label="Barangay" value={storedValue(profile.barangay?.name)} />
                         <InfoRow label="Address" value={storedValue(profile.address)} />
-                        <InfoRow label="Birthday" value={publicView ? storedValue(profile.birthday) : formatDate(profile.birthday)} />
+                        <InfoRow label="Birthday" value={formatDate(profile.birthday)} />
                         <InfoRow label="Sex" value={storedValue(profile.sex)} />
                         <InfoRow label="Civil Status" value={storedValue(profile.civil_status)} />
                         <InfoRow label={ownershipFieldLabel(profile.sector)} value={storedValue(profile.ownership_type)} />

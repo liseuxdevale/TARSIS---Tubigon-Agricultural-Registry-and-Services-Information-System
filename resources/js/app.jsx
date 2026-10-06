@@ -10,6 +10,7 @@ import AboutTarsis from './pages/AboutTarsis';
 import Dashboard from './pages/dashboard/Dashboard';
 import SignIn from './pages/auth/SignIn';
 import SignUp from './pages/auth/SignUp';
+import ForcePasswordChange from './pages/auth/ForcePasswordChange';
 import AccountProfile from './pages/account/AccountProfile';
 import Register from './pages/registration/Register';
 import Profile from './pages/registration/Profile';
@@ -48,6 +49,7 @@ function App() {
                     <Route path="/staff/register" element={<Navigate to="/signup" replace />} />
                     <Route path="/signin" element={<Navigate to="/login" replace />} />
                     <Route path="/signup" element={<SignUp />} />
+                    <Route path="/change-password" element={<ForcePasswordChange />} />
                     <Route path="/" element={<Landing />} />
                     <Route path="/about-tarsis" element={<AboutTarsis />} />
                     <Route path="/announcements" element={<PublicAnnouncements />} />
@@ -110,10 +112,11 @@ function ScrollToLocation() {
 }
 
 function RequireAuth({ children }) {
-    const { signedIn, loading } = useAuth();
+    const { signedIn, loading, user } = useAuth();
     const location = useLocation();
     if (loading) return <PageLoader />;
     if (!signedIn) return <Navigate to="/login" replace state={{ from: location }} />;
+    if (user?.must_change_password && location.pathname !== '/change-password') return <Navigate to="/change-password" replace />;
     return children;
 }
 

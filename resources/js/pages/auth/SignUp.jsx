@@ -77,12 +77,11 @@ export default function SignUp() {
         <AuthShell>
             <div className="relative flex min-h-screen flex-col items-center justify-center px-6 py-12">
                 <div className="mb-8 flex flex-col items-center">
-                    <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-full border border-white/30 bg-white/15 shadow-xl backdrop-blur-sm">
-                        <MaoSeal size={78} />
+                    <div className="mb-5 flex h-32 w-32 items-center justify-center rounded-full border border-white/30 bg-white/15 shadow-xl backdrop-blur-sm">
+                        <MaoSeal size={106} />
                     </div>
                     <h1 className="text-center text-4xl font-black leading-tight text-white">TARSIS</h1>
-                    <p className="mt-1.5 text-center text-sm text-green-300">Sign up</p>
-                    <p className="mt-0.5 text-center text-xs text-white/40">Create your TARSIS account</p>
+                    <p className="mt-2 text-center text-xl font-bold text-green-300">Sign up</p>
                 </div>
 
                 <div className="w-full max-w-2xl rounded-2xl border-2 border-green-400 bg-white p-5 shadow-2xl">

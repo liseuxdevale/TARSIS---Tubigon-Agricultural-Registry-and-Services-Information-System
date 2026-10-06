@@ -180,6 +180,7 @@ class AuthController extends Controller
         $user->update([
             'password' => Hash::make($data['password']),
             'password_changed_at' => now(),
+            'must_change_password' => false,
         ]);
 
         $audit->log($request, 'user.password_changed', $user);

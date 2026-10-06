@@ -13,7 +13,7 @@ import {
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, PieController, ArcElement, Tooltip, Legend);
 
-export default function ChartBox({ type, labels, values, colors }) {
+export default function ChartBox({ type, labels, values, colors, minWidth }) {
     const canvasRef = useRef(null);
 
     useEffect(() => {
@@ -51,5 +51,11 @@ export default function ChartBox({ type, labels, values, colors }) {
         return () => chart.destroy();
     }, [type, labels.join('|'), values.join('|'), Array.isArray(colors) ? colors.join('|') : colors]);
 
-    return <div className="h-80 rounded-md" style={{ background: 'var(--role-surface)' }}><canvas ref={canvasRef} /></div>;
+    return (
+        <div className="overflow-x-auto rounded-md" style={{ background: 'var(--role-surface)' }}>
+            <div className="h-80" style={{ minWidth }}>
+                <canvas ref={canvasRef} />
+            </div>
+        </div>
+    );
 }

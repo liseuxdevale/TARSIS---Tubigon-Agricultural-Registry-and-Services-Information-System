@@ -172,7 +172,7 @@ export default function PublicAnnouncementDetails() {
                                 </p>
                             </div>
                             <div className="mt-6 grid gap-2">
-                                <Link className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#c8952a] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b68425] focus:outline-none focus:ring-2 focus:ring-[#c8952a]/30" to="/registration">
+                                <Link className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#c8952a] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b68425] focus:outline-none focus:ring-2 focus:ring-[#c8952a]/30" to="/signup" state={{ from: { pathname: '/registration' } }}>
                                     Register as Beneficiary
                                 </Link>
                                 <Link className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#1a4731] px-4 py-2 text-sm font-semibold text-[#1a4731] transition hover:bg-[#f0f6f2] focus:outline-none focus:ring-2 focus:ring-[#1a4731]/25" to={statusHref}>

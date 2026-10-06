@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Archive, ArchiveRestore, Download, Edit3, Eye, KeyRound, MoreVertical, Search, ShieldCheck, Trash2, UserCheck, UserPlus, Users, UserX } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Archive, ArchiveRestore, Download, Edit3, Eye, KeyRound, MoreVertical, Search, Trash2, UserCheck, UserPlus, Users, UserX } from 'lucide-react';
 import { Card, Field, InfoRow, Modal, PageHeader, PageLoader, StatusBadge } from '../../components/common';
 import { roles } from '../../constants/options';
 import { api } from '../../services/api';
@@ -16,22 +16,12 @@ const roleLabels = {
     pending_staff: 'User Account',
 };
 
-const staffRoles = roles.filter((role) => ['super_admin', 'barangay_technical_staff', 'crop_head', 'fish_head', 'livestock_head', 'poultry_head'].includes(role));
-const userFilterRoles = [
-    ...staffRoles,
-    'sector:farmer',
-    'sector:fisherfolk',
-    'sector:livestock',
-    'sector:poultry',
-];
+const staffRoles = roles.filter((role) => ['super_admin', 'mao_staff', 'barangay_technical_staff', 'crop_head', 'fish_head', 'livestock_head', 'poultry_head'].includes(role));
+const userFilterRoles = staffRoles;
 const filterRoleLabels = {
     ...roleLabels,
-    'sector:farmer': 'Crop Users',
-    'sector:fisherfolk': 'Fisheries Users',
-    'sector:livestock': 'Livestock Users',
-    'sector:poultry': 'Poultry Users',
 };
-const emptyFilters = { search: '', role: '', barangay: '', status: '' };
+const emptyFilters = { search: '', role: '', status: '' };
 const archiveReasons = ['Inactive Employee', 'Transferred', 'Duplicate Account', 'Resigned', 'Other'];
 
 export default function UserManagement({ archived = false }) {
@@ -112,10 +102,9 @@ export default function UserManagement({ archived = false }) {
             {toast && <Card><p className="text-sm font-semibold text-emerald-700">{toast}</p></Card>}
             {!archived && <StatsCards stats={stats} />}
             <Card>
-                <form className="grid gap-3 lg:grid-cols-[1.5fr_1fr_1fr_1fr_auto]" onSubmit={applyFilters}>
+                <form className="grid gap-3 lg:grid-cols-[1.5fr_1fr_1fr_auto]" onSubmit={applyFilters}>
                     <Field label="Search"><input className="field" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} placeholder="Name, email, or phone number" /></Field>
                     <Field label="Role"><RoleSelect value={filters.role} onChange={(role) => setFilters({ ...filters, role })} allLabel="All Roles" options={userFilterRoles} labels={filterRoleLabels} /></Field>
-                    <Field label="Barangay"><BarangaySelect barangays={barangays} value={filters.barangay} onChange={(barangay) => setFilters({ ...filters, barangay })} /></Field>
                     <Field label="Status"><StatusSelect archived={archived} value={filters.status} onChange={(status) => setFilters({ ...filters, status })} /></Field>
                     <div className="flex items-end gap-2">
                         <button className="btn-primary inline-flex items-center gap-2" type="submit"><Search className="h-4 w-4" />Search</button>
@@ -179,7 +168,12 @@ function UserRow({ user, archived, openMenu, setOpenMenu, setModal }) {
             <td className="px-4 py-3 text-gray-600">{user.phone || 'Not set'}</td>
             <td className="px-4 py-3 text-gray-700">{roleLabel(user.role)}</td>
             <td className="px-4 py-3 text-gray-600">{barangayNames(user)}</td>
-            <td className="px-4 py-3"><StatusBadge status={user.status} /></td>
+            <td className="px-4 py-3">
+                <div className="flex flex-col items-start gap-1">
+                    <StatusBadge status={user.status} />
+                    {user.must_change_password && <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">Password reset</span>}
+                </div>
+            </td>
             <td className="px-4 py-3 text-gray-600">{lastLogin(user.last_login_at)}</td>
             <td className="relative px-4 py-3">
                 <button className="mini-btn" type="button" onClick={() => setOpenMenu(openMenu === user.id ? null : user.id)} aria-label={`Actions for ${user.name}`}><MoreVertical className="h-4 w-4" /></button>
@@ -194,7 +188,10 @@ function MobileUserCard({ user, archived, setModal }) {
         <details className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                 <span className="flex items-center gap-3"><Avatar user={user} /><span><span className="block font-bold text-gray-900">{user.name}</span><span className="text-xs text-gray-500">{roleLabel(user.role)}</span></span></span>
-                <StatusBadge status={user.status} />
+                    <span className="flex flex-col items-end gap-1">
+                        <StatusBadge status={user.status} />
+                        {user.must_change_password && <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">Password reset</span>}
+                    </span>
             </summary>
             <div className="mt-3 grid gap-2 border-t border-gray-100 pt-3 text-sm">
                 <InfoRow label="Email" value={user.email} />
@@ -340,7 +337,7 @@ function UserProfileInfoRow({ label, value }) {
 
 function ResetModal({ user, onClose, onConfirm }) {
     const [password, setPassword] = useState('');
-    return <Modal open title="Reset Password" onClose={onClose}><form className="space-y-3" onSubmit={(event) => { event.preventDefault(); onConfirm(password); }}><p className="text-sm text-gray-600">Reset password for <strong>{user.name}</strong>.</p><Field label="New Password"><input required minLength={8} type="password" className="field" value={password} onChange={(event) => setPassword(event.target.value)} /></Field><div className="flex justify-end gap-2"><button className="btn-secondary" type="button" onClick={onClose}>Cancel</button><button className="btn-primary" type="submit">Reset Password</button></div></form></Modal>;
+    return <Modal open title="Reset Password" onClose={onClose}><form className="space-y-3" onSubmit={(event) => { event.preventDefault(); onConfirm(password); }}><p className="text-sm text-gray-600">Reset password for <strong>{user.name}</strong>. The user must replace this temporary password on their next login.</p><Field label="Temporary Password"><input required minLength={8} type="password" className="field" value={password} onChange={(event) => setPassword(event.target.value)} /></Field><div className="flex justify-end gap-2"><button className="btn-secondary" type="button" onClick={onClose}>Cancel</button><button className="btn-primary" type="submit">Reset Password</button></div></form></Modal>;
 }
 
 function ArchiveModal({ user, onClose, onConfirm }) {
@@ -360,10 +357,6 @@ function FormSection({ title, children }) {
 
 function RoleSelect({ value, onChange, allLabel, options = staffRoles, labels = roleLabels }) {
     return <select className="field" value={value} onChange={(event) => onChange(event.target.value)}>{allLabel && <option value="">{allLabel}</option>}{options.map((role) => <option key={role} value={role}>{labels[role] || roleLabel(role)}</option>)}</select>;
-}
-
-function BarangaySelect({ barangays, value, onChange }) {
-    return <select className="field" value={value} onChange={(event) => onChange(event.target.value)}><option value="">All Barangays</option><option value="municipal">Municipal-wide</option>{barangays.map((barangay) => <option key={barangay.id} value={barangay.id}>{barangay.name}</option>)}</select>;
 }
 
 function StatusSelect({ archived, value, onChange }) {
@@ -412,7 +405,7 @@ function lastLogin(value) {
     return `${days} days ago`;
 }
 function labelForAction(type) { return ({ activate: 'Activate', deactivate: 'Deactivate', restore: 'Restore' })[type] || type; }
-function actionToast(action) { return ({ reset: 'Password reset successfully.', activate: 'User activated successfully.', deactivate: 'User deactivated successfully.', archive: 'User archived successfully.', restore: 'User restored successfully.', delete: 'User permanently deleted.' })[action] || 'Action completed.'; }
+function actionToast(action) { return ({ reset: 'Password reset successfully. The user must change it on next login.', activate: 'User activated successfully.', deactivate: 'User deactivated successfully.', archive: 'User archived successfully.', restore: 'User restored successfully.', delete: 'User permanently deleted.' })[action] || 'Action completed.'; }
 function exportCsv(users) {
     const rows = [['Name', 'Email', 'Phone', 'Role', 'Assigned Barangay', 'Status', 'Last Login'], ...users.map((user) => [user.name, user.email, user.phone || '', roleLabel(user.role), barangayNames(user), user.status, lastLogin(user.last_login_at)])];
     const blob = new Blob([rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n')], { type: 'text/csv' });

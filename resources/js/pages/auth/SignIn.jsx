@@ -56,16 +56,15 @@ export default function SignIn() {
         <AuthShell>
             <div className="relative flex min-h-screen flex-col items-center justify-center px-6 py-12">
                 <div className="mb-8 flex flex-col items-center">
-                    <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-full border border-white/30 bg-white/15 shadow-xl backdrop-blur-sm">
-                        <MaoSeal size={78} />
+                    <div className="mb-5 flex h-32 w-32 items-center justify-center rounded-full border border-white/30 bg-white/15 shadow-xl backdrop-blur-sm">
+                        <MaoSeal size={106} />
                     </div>
                     <h1 className="text-center text-4xl font-black leading-tight text-white">TARSIS</h1>
-                    <p className="mt-1.5 text-center text-sm text-green-300">{title}</p>
-                    <p className="mt-0.5 text-center text-xs text-white/40">Access your TARSIS account</p>
+                    <p className="mt-2 text-center text-xl font-bold text-green-300">{title}</p>
                 </div>
 
                 <div className="w-full max-w-md rounded-2xl border-2 border-green-400 bg-white p-5 text-left shadow-2xl">
-                    <div className="mb-5">
+                    <div className="mb-5 text-center">
                         <p className="text-sm font-black text-gray-900">Welcome back</p>
                         <p className="mt-1 text-xs leading-relaxed text-gray-500">
                             Enter your email and password to continue.
@@ -107,6 +106,14 @@ export default function SignIn() {
                                 >
                                     {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
                                 </button>
+                            </div>
+                            <div className="mt-2 flex justify-end">
+                                <a
+                                    className="text-xs font-bold text-green-700 transition hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                                    href="mailto:mao@tarsis.local?subject=TARSIS%20Password%20Reset%20Request"
+                                >
+                                    Forgot password?
+                                </a>
                             </div>
                             <FieldError>{errors.password}</FieldError>
                         </div>
@@ -165,9 +172,13 @@ export function fieldClass(error) {
     return `w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:ring-2 ${error ? 'border-red-300 focus:border-red-500 focus:ring-red-100' : 'border-gray-200 focus:border-green-500 focus:ring-green-500/20'}`;
 }
 
-export const authButtonClass = 'flex min-h-11 w-full items-center justify-center rounded-xl bg-green-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-700/30 disabled:cursor-not-allowed disabled:opacity-60';
+export const authButtonClass = 'flex min-h-12 w-full items-center justify-center rounded-xl bg-green-700 px-4 py-3 text-base font-bold text-white shadow-sm transition-colors hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-700/30 disabled:cursor-not-allowed disabled:opacity-60';
 
 function homePath(user, intended) {
+    if (user?.must_change_password) {
+        return '/change-password';
+    }
+
     if (sectorAdminRoles.includes(user?.role)) {
         return '/dashboard';
     }

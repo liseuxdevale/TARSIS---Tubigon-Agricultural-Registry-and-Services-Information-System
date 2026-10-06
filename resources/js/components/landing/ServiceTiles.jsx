@@ -54,13 +54,14 @@ export default function ServiceTiles() {
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                     {services.map((service) => {
                         const Icon = service.icon;
+                        const isLastOddCard = services.length % 2 === 1 && service === services[services.length - 1];
 
                         return (
                             <Link
                                 key={service.titleKey}
                                 to={service.to}
                                 state={service.state}
-                                className="group flex min-h-56 flex-col rounded-lg border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5 transition hover:-translate-y-0.5 hover:border-[#c8952a]/60 hover:shadow-md hover:shadow-slate-950/10 focus:outline-none focus:ring-2 focus:ring-[#1a4731]/25"
+                                className={`group flex min-h-56 flex-col rounded-lg border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5 transition hover:-translate-y-0.5 hover:border-[#c8952a]/60 hover:shadow-md hover:shadow-slate-950/10 focus:outline-none focus:ring-2 focus:ring-[#1a4731]/25 ${isLastOddCard ? 'sm:col-span-2 sm:mx-auto sm:w-[calc(50%-0.5rem)] lg:col-span-1 lg:mx-0 lg:w-auto' : ''}`}
                             >
                                 <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#f0f6f2] text-[#1a4731] transition group-hover:bg-[#1a4731] group-hover:text-white">
                                     <Icon className="h-5 w-5" aria-hidden="true" />

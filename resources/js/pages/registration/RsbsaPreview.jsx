@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Card, EmptyState, PageHeader, PageLoader } from '../../components/common';
 import RsbsaTemplateFirstRenderer from '../../components/rsbsa/RsbsaTemplateFirstRenderer';
@@ -15,7 +15,8 @@ export default function RsbsaPreview({ view = 'full' }) {
     const { id } = useParams();
     const [calibration] = useState(loadCalibration);
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
-    const [pdfBusy, setPdfBusy] = useState(false);
+    const [pdfAction, setPdfAction] = useState('');
+    const [idAction, setIdAction] = useState('');
     const { data, loading, error } = useResource(
         () => api.get(`/public/registrants/${encodeURIComponent(id)}/rsbsa-preview`).then((response) => response.data),
         [id]
@@ -71,7 +72,7 @@ export default function RsbsaPreview({ view = 'full' }) {
     }
 
     async function previewPdf() {
-        setPdfBusy(true);
+        setPdfAction('preview');
         try {
             const pdf = await buildPdf();
             const blob = pdf.output('blob');
@@ -80,17 +81,54 @@ export default function RsbsaPreview({ view = 'full' }) {
                 return URL.createObjectURL(blob);
             });
         } finally {
-            setPdfBusy(false);
+            setPdfAction('');
         }
     }
 
     async function downloadPdf() {
-        setPdfBusy(true);
+        setPdfAction('download');
         try {
             const pdf = await buildPdf();
             pdf.save(`RSBSA_Enrollment_Form_${registrantFileName(data)}.pdf`);
         } finally {
-            setPdfBusy(false);
+            setPdfAction('');
+        }
+    }
+
+    async function downloadIdPng() {
+        setIdAction('download');
+        try {
+            const { default: html2canvas } = await import('html2canvas');
+            const idPreview = document.querySelector('.tarsis-id-print-wrap');
+            if (!idPreview) return;
+
+            if (document.fonts && document.fonts.ready) {
+                await document.fonts.ready;
+            }
+            const capture = await createMaoIdPngCapture(idPreview);
+
+            try {
+                const canvas = await html2canvas(capture.node, {
+                    scale: 2,
+                    backgroundColor: '#ffffff',
+                    useCORS: true,
+                    width: capture.node.offsetWidth,
+                    height: capture.node.offsetHeight,
+                    scrollX: 0,
+                    scrollY: 0,
+                    windowWidth: capture.node.offsetWidth,
+                    windowHeight: capture.node.offsetHeight,
+                });
+
+                const anchor = document.createElement('a');
+                anchor.href = canvas.toDataURL('image/png');
+                anchor.download = `TARSIS_MAO_ID_${registrantFileName(data)}.png`;
+                anchor.click();
+            } finally {
+                capture.destroy();
+            }
+        } finally {
+            setIdAction('');
         }
     }
 
@@ -110,11 +148,20 @@ export default function RsbsaPreview({ view = 'full' }) {
                 <PageHeader
                     title="MAO ID Review"
                     description="Read-only preview of the MAO ID generated from this registration record."
-                    actions={<button className="btn-secondary" onClick={() => window.print()}>Print ID</button>}
+                    actions={(
+                        <div className="hidden flex-wrap items-center gap-2 md:flex">
+                            <button className="btn-secondary" onClick={downloadIdPng} disabled={Boolean(idAction)}>{idAction === 'download' ? 'Generating...' : 'Download ID'}</button>
+                            <button className="btn-primary" onClick={() => window.print()}>Print ID</button>
+                        </div>
+                    )}
                 />
                 <ReviewLinks registryNumber={data.registry_number} activeView="mao-id" />
                 <Card title="TARSIS Registry ID">
-                    <DigitalID registrant={data} printable />
+                    <ResponsiveMaoIdPreview registrant={data} />
+                    <div className="mt-4 grid gap-2 md:hidden">
+                        <button className="btn-secondary" onClick={downloadIdPng} disabled={Boolean(idAction)}>{idAction === 'download' ? 'Generating...' : 'Download ID'}</button>
+                        <button className="btn-primary" onClick={() => window.print()}>Print ID</button>
+                    </div>
                 </Card>
             </section>
         );
@@ -126,16 +173,19 @@ export default function RsbsaPreview({ view = 'full' }) {
                 title="RSBSA Enrollment Form Preview"
                 description="Read-only printable preview generated from the saved registration record."
                 actions={(
-                    <>
-                        <button className="btn-secondary" onClick={() => window.print()}>Print File</button>
-                        <button className="btn-secondary" onClick={previewPdf} disabled={pdfBusy}>{pdfBusy ? 'Generating...' : 'Preview PDF'}</button>
-                        <button className="btn-primary" onClick={downloadPdf} disabled={pdfBusy}>{pdfBusy ? 'Generating...' : 'Download PDF'}</button>
-                    </>
+                    <div className="hidden flex-wrap items-center gap-2 md:flex">
+                        <button className="btn-secondary" onClick={previewPdf} disabled={Boolean(pdfAction)}>{pdfAction === 'preview' ? 'Generating...' : 'Preview PDF'}</button>
+                        <button className="btn-primary" onClick={downloadPdf} disabled={Boolean(pdfAction)}>{pdfAction === 'download' ? 'Generating...' : 'Download PDF'}</button>
+                    </div>
                 )}
             />
             <ReviewLinks registryNumber={data.registry_number} activeView="form" />
             <Card>
-                <RsbsaTemplateFirstRenderer registrant={data} calibration={calibration} showGrid={false} />
+                <ResponsiveRsbsaPreview registrant={data} calibration={calibration} />
+                <div className="mt-4 grid gap-2 md:hidden">
+                    <button className="btn-secondary" onClick={previewPdf} disabled={Boolean(pdfAction)}>{pdfAction === 'preview' ? 'Generating...' : 'Preview PDF'}</button>
+                    <button className="btn-primary" onClick={downloadPdf} disabled={Boolean(pdfAction)}>{pdfAction === 'download' ? 'Generating...' : 'Download PDF'}</button>
+                </div>
             </Card>
             {pdfPreviewUrl && (
                 <div className="fixed inset-0 z-[2000] flex flex-col bg-slate-950/80 p-4 backdrop-blur-sm">
@@ -145,7 +195,6 @@ export default function RsbsaPreview({ view = 'full' }) {
                             <p className="text-xs text-slate-500">This is the same file generated by Download PDF.</p>
                         </div>
                         <div className="flex gap-2">
-                            <button className="btn-secondary" type="button" onClick={downloadPdf} disabled={pdfBusy}>Download</button>
                             <button className="mini-btn" type="button" onClick={() => setPdfPreviewUrl((current) => {
                                 if (current) URL.revokeObjectURL(current);
                                 return '';
@@ -160,6 +209,86 @@ export default function RsbsaPreview({ view = 'full' }) {
                 </div>
             )}
         </section>
+    );
+}
+
+function ResponsiveMaoIdPreview({ registrant }) {
+    const frameRef = useRef(null);
+    const previewRef = useRef(null);
+    const [fit, setFit] = useState({ scale: 1, height: 0 });
+
+    useEffect(() => {
+        const frame = frameRef.current;
+        const preview = previewRef.current;
+        if (!frame || !preview) return undefined;
+
+        const updateFit = () => {
+            const cards = [...preview.querySelectorAll('.tarsis-id-card')];
+            const cardWidth = Math.max(...cards.map((card) => card.offsetWidth || card.scrollWidth || 0), 1280);
+            const naturalWidth = Math.max(cardWidth, preview.scrollWidth || 0, 1280);
+            const naturalHeight = preview.scrollHeight || 0;
+            const availableWidth = frame.clientWidth || naturalWidth;
+            const scale = Math.min(1, availableWidth / naturalWidth);
+            setFit({ scale, height: naturalHeight * scale });
+        };
+
+        updateFit();
+        const observer = new ResizeObserver(updateFit);
+        observer.observe(frame);
+        observer.observe(preview);
+        window.addEventListener('orientationchange', updateFit);
+
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('orientationchange', updateFit);
+        };
+    }, [registrant?.id]);
+
+    return (
+        <div ref={frameRef} className="mao-id-preview-fit" style={{ height: fit.height || undefined }}>
+            <div ref={previewRef} className="mao-id-preview-fit-inner" style={{ transform: `scale(${fit.scale})` }}>
+                <DigitalID registrant={registrant} printable />
+            </div>
+        </div>
+    );
+}
+
+function ResponsiveRsbsaPreview({ registrant, calibration }) {
+    const frameRef = useRef(null);
+    const formRef = useRef(null);
+    const [fit, setFit] = useState({ scale: 1, height: 0 });
+
+    useEffect(() => {
+        const frame = frameRef.current;
+        const form = formRef.current;
+        if (!frame || !form) return undefined;
+
+        const updateFit = () => {
+            const naturalWidth = form.scrollWidth || 1240;
+            const naturalHeight = form.scrollHeight || 0;
+            const availableWidth = frame.clientWidth || naturalWidth;
+            const scale = Math.min(1, availableWidth / naturalWidth);
+            setFit({ scale, height: naturalHeight * scale });
+        };
+
+        updateFit();
+        const observer = new ResizeObserver(updateFit);
+        observer.observe(frame);
+        observer.observe(form);
+        window.addEventListener('orientationchange', updateFit);
+
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('orientationchange', updateFit);
+        };
+    }, [registrant?.id, calibration]);
+
+    return (
+        <div ref={frameRef} className="rsbsa-preview-fit" style={{ height: fit.height || undefined }}>
+            <div ref={formRef} className="rsbsa-preview-fit-inner" style={{ transform: `scale(${fit.scale})` }}>
+                <RsbsaTemplateFirstRenderer registrant={registrant} calibration={calibration} showGrid={false} />
+            </div>
+        </div>
     );
 }
 
@@ -203,6 +332,41 @@ function waitForImages(root) {
             img.addEventListener('error', resolve, { once: true });
         });
     }));
+}
+
+async function createMaoIdPngCapture(source) {
+    const host = document.createElement('div');
+    host.setAttribute('aria-hidden', 'true');
+    host.style.position = 'fixed';
+    host.style.left = '-10000px';
+    host.style.top = '0';
+    host.style.width = '1280px';
+    host.style.maxWidth = 'none';
+    host.style.background = '#ffffff';
+    host.style.pointerEvents = 'none';
+    host.style.zIndex = '-1';
+
+    const clone = source.cloneNode(true);
+    clone.style.width = '1280px';
+    clone.style.maxWidth = 'none';
+    clone.style.overflow = 'visible';
+    clone.style.padding = '0';
+    clone.style.gap = '24px';
+
+    clone.querySelectorAll('.tarsis-id-card').forEach((card) => {
+        card.style.width = '1280px';
+        card.style.maxWidth = 'none';
+        card.style.flex = '0 0 auto';
+    });
+
+    host.appendChild(clone);
+    document.body.appendChild(host);
+    await waitForImages(host);
+
+    return {
+        node: clone,
+        destroy: () => host.remove(),
+    };
 }
 
 function fitImageToPage(imageWidth, imageHeight, pageWidth, pageHeight) {
@@ -325,7 +489,6 @@ function ReviewLinks({ registryNumber, activeView }) {
                 state={{ registryNumber }}
             >
                 <span className="font-bold text-gray-900">Form Review</span>
-                <span className="mt-1 block text-sm text-gray-500">Review the enrollment form linked to this registration.</span>
             </Link>
             <Link
                 className={maoIdClassName}
@@ -333,7 +496,6 @@ function ReviewLinks({ registryNumber, activeView }) {
                 state={{ registryNumber }}
             >
                 <span className="font-bold text-gray-900">MAO ID Review</span>
-                <span className="mt-1 block text-sm text-gray-500">Review the MAO ID linked to this registration.</span>
             </Link>
         </div>
     );

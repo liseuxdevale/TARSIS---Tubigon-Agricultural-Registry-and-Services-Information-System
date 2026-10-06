@@ -189,12 +189,31 @@ export default function RegistrationManagement() {
                 </div>
             </Card>
             {duplicates.length > 0 && (
-                <Card title="Duplicate Detection">
-                    <div className="space-y-2">
+                <Card
+                    title="Duplicate Detection"
+                    actions={<button className="mini-btn" type="button" onClick={() => setDuplicates([])}>Close</button>}
+                >
+                    <div className="space-y-3">
                         {duplicates.map((group) => (
                             <div key={group.match} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
                                 <p className="font-semibold text-amber-950">{group.match} - {group.total} records</p>
-                                <p className="text-amber-800">{group.records.map((item) => item.registry_number).join(', ')}</p>
+                                <div className="mt-3 space-y-2">
+                                    {group.records.map((item) => (
+                                        <div key={item.id} className="flex flex-col gap-2 rounded-md border border-amber-200/80 bg-white/80 p-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div className="min-w-0">
+                                                <p className="font-semibold text-slate-950">{item.registry_number} - {item.full_name}</p>
+                                                <p className="text-xs text-slate-600">
+                                                    {[registrantSectorLabel(item.sector), item.barangay?.name, item.status].filter(Boolean).join(' / ')}
+                                                </p>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                <button className="mini-btn" type="button" onClick={() => openProfile(item)}>Profile</button>
+                                                <button className="mini-btn" type="button" onClick={() => setModal({ type: 'edit', row: item })}>Edit</button>
+                                                {canApprove && <button className="mini-btn border-red-200 text-red-700 hover:bg-red-50" type="button" onClick={() => setModal({ type: 'archive', row: item })}>Archive</button>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         ))}
                     </div>

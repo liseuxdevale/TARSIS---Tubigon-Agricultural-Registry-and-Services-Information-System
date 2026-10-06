@@ -8,7 +8,7 @@ import { ROLES, roleName } from '../../utils/rbac';
 import DigitalID from '../registration/DigitalID';
 
 export default function AccountProfile() {
-    const { user } = useAuth();
+    const { user, updateUser } = useAuth();
     const isFarmer = user?.role === ROLES.FARMER;
     const [profile, setProfile] = useState(null);
     const [digitalId, setDigitalId] = useState(null);
@@ -80,6 +80,7 @@ export default function AccountProfile() {
             payload.append('avatar', file);
             const response = await api.post('/auth/avatar', payload, { headers: { 'Content-Type': 'multipart/form-data' } });
             setAccount(response.data);
+            updateUser(response.data);
         } catch (exception) {
             setError(exception.message || 'Unable to upload profile photo.');
         } finally {
@@ -135,6 +136,7 @@ export default function AccountProfile() {
                 account={account}
                 onClose={() => setEditingAccount(false)}
                 onSaved={setAccount}
+                onUserUpdated={updateUser}
                 setError={setError}
             />
             <Card title="Recent Activity">
@@ -200,7 +202,7 @@ function AccountInfoRow({ label, value }) {
     );
 }
 
-function EditAccountModal({ open, account, onClose, onSaved, setError }) {
+function EditAccountModal({ open, account, onClose, onSaved, onUserUpdated, setError }) {
     const [form, setForm] = useState({ name: '', phone: '', office_department: '' });
     const [saving, setSaving] = useState(false);
     const [localError, setLocalError] = useState('');
@@ -223,6 +225,7 @@ function EditAccountModal({ open, account, onClose, onSaved, setError }) {
         try {
             const response = await api.put('/auth/profile', form);
             onSaved(response.data);
+            onUserUpdated(response.data);
             onClose();
         } catch (exception) {
             setLocalError(exception.message || 'Unable to update profile.');

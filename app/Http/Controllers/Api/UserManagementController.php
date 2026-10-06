@@ -23,6 +23,7 @@ class UserManagementController extends Controller
         $hasArchiveColumns = Schema::hasColumn('users', 'archived_at');
 
         $query = User::with(['barangay', 'barangays', 'createdBy:id,name', 'archivedBy:id,name', 'registrant:id,email,sector,registry_number'])
+            ->whereIn('role', self::STAFF_ROLES)
             ->when($hasArchiveColumns && ! $request->boolean('archived'), fn ($query) => $query->whereNull('archived_at'))
             ->when($hasArchiveColumns && $request->boolean('archived'), fn ($query) => $query->whereNotNull('archived_at'))
             ->when(! $hasArchiveColumns && $request->boolean('archived'), fn ($query) => $query->whereRaw('1 = 0'))
@@ -35,13 +36,6 @@ class UserManagementController extends Controller
                 });
             })
             ->when($request->role, function ($query, $role) {
-                if (str_starts_with($role, 'sector:')) {
-                    $sector = str($role)->after('sector:')->toString();
-
-                    return $query->where('role', 'farmer')
-                        ->whereHas('registrant', fn ($registrant) => $registrant->where('sector', $sector));
-                }
-
                 return $query->where('role', $role);
             })
             ->when($request->status, fn ($query, $status) => $query->where('status', $status))
@@ -64,18 +58,18 @@ class UserManagementController extends Controller
     {
         if (! Schema::hasColumn('users', 'archived_at')) {
             return response()->json([
-                'total' => User::count(),
-                'active' => User::where('status', 'active')->count(),
-                'inactive' => User::where('status', 'inactive')->count(),
+                'total' => User::whereIn('role', self::STAFF_ROLES)->count(),
+                'active' => User::whereIn('role', self::STAFF_ROLES)->where('status', 'active')->count(),
+                'inactive' => User::whereIn('role', self::STAFF_ROLES)->where('status', 'inactive')->count(),
                 'archived' => 0,
             ]);
         }
 
         return response()->json([
-            'total' => User::whereNull('archived_at')->count(),
-            'active' => User::whereNull('archived_at')->where('status', 'active')->count(),
-            'inactive' => User::whereNull('archived_at')->where('status', 'inactive')->count(),
-            'archived' => User::whereNotNull('archived_at')->count(),
+            'total' => User::whereIn('role', self::STAFF_ROLES)->whereNull('archived_at')->count(),
+            'active' => User::whereIn('role', self::STAFF_ROLES)->whereNull('archived_at')->where('status', 'active')->count(),
+            'inactive' => User::whereIn('role', self::STAFF_ROLES)->whereNull('archived_at')->where('status', 'inactive')->count(),
+            'archived' => User::whereIn('role', self::STAFF_ROLES)->whereNotNull('archived_at')->count(),
         ]);
     }
 
@@ -249,7 +243,10 @@ class UserManagementController extends Controller
     public function resetPassword(Request $request, User $user, AuditLogger $audit)
     {
         $data = $request->validate(['password' => ['required', 'string', 'min:8']]);
-        $user->update(['password' => Hash::make($data['password'])]);
+        $user->update([
+            'password' => Hash::make($data['password']),
+            'must_change_password' => true,
+        ]);
         $audit->log($request, 'user.password_reset', $user);
 
         return response()->json(['message' => 'Password reset.']);

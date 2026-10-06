@@ -19,7 +19,7 @@ class ReportController extends Controller
     {
         $hasBarangayScope = $request->user()?->role === 'barangay_technical_staff';
         $barangayIds = $hasBarangayScope ? $request->user()->assignedBarangayIds() : [];
-        $sector = $this->sectorForRole($request->user()?->role);
+        $sector = $this->reportSector($request);
         $showDashboardAnnouncements = ! in_array($request->user()?->role, ['farmer', 'barangay_technical_staff'], true);
         $today = now()->startOfDay();
         $weekFromNow = now()->addWeek()->endOfDay();
@@ -132,6 +132,23 @@ class ReportController extends Controller
         };
     }
 
+    private function reportSector(Request $request): ?string
+    {
+        $roleSector = $this->sectorForRole($request->user()?->role);
+
+        if ($roleSector) {
+            return $roleSector;
+        }
+
+        if (! in_array($request->user()?->role, ['super_admin', 'mao_staff'], true)) {
+            return null;
+        }
+
+        $sector = $request->string('sector')->toString();
+
+        return in_array($sector, ['farmer', 'fisherfolk', 'livestock', 'poultry'], true) ? $sector : null;
+    }
+
     private function scopeAnnouncementsToSector($query, string $sector)
     {
         return $query->where(function ($query) use ($sector) {
@@ -143,7 +160,7 @@ class ReportController extends Controller
 
     public function export(Request $request)
     {
-        $sector = $this->sectorForRole($request->user()?->role);
+        $sector = $this->reportSector($request);
         $dataset = $request->string('dataset', 'registrants')->toString();
         $format = $request->string('format', 'csv')->toString();
 

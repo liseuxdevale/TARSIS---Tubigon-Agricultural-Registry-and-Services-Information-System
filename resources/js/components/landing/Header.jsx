@@ -109,12 +109,13 @@ export default function Header() {
     };
 
     return (
-        <header className={`sticky top-0 z-50 border-b border-slate-200 bg-white transition-shadow duration-200 ${scrolled ? 'shadow-md shadow-slate-900/10' : ''}`}>
-            <div className="mx-auto flex min-h-20 max-w-screen-xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-                <a href="/#home" className="flex min-w-0 flex-1 items-center gap-2 rounded-sm focus:outline-none focus:ring-2 focus:ring-[#1a4731]/30 sm:gap-4 lg:flex-none" onClick={closeMenu}>
+        <>
+            <header className={`fixed inset-x-0 top-0 z-[1000] border-b border-slate-200 bg-white transition-shadow duration-200 ${scrolled ? 'shadow-md shadow-slate-900/10' : ''}`}>
+                <div className="mx-auto flex min-h-20 max-w-screen-xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+                    <a href="/#home" className="flex min-w-0 flex-1 items-center gap-2 rounded-sm focus:outline-none focus:ring-2 focus:ring-[#1a4731]/30 sm:gap-4 lg:flex-none" onClick={closeMenu}>
                     <MaoSeal size={52} className="shrink-0 max-sm:h-11 max-sm:w-11" />
                     <span className="min-w-0 leading-tight">
-                        <span className="hidden truncate text-[11px] font-extrabold uppercase tracking-wide text-slate-500 sm:block sm:text-xs">{t('brand.office')}</span>
+                        <span className="hidden truncate text-[11px] font-extrabold uppercase tracking-wide text-[#1a4731] sm:block sm:text-xs">{t('brand.office')}</span>
                         <span className="block truncate text-2xl font-extrabold leading-none text-[#1a4731] sm:text-3xl">{t('brand.name')}</span>
                         <span className="hidden truncate text-[11px] font-medium text-slate-500 sm:block sm:text-xs">{t('brand.fullName')}</span>
                     </span>
@@ -234,7 +235,9 @@ export default function Header() {
                     </nav>
                 </div>
             )}
-        </header>
+            </header>
+            <div className="min-h-20" aria-hidden="true" />
+        </>
     );
 }
 

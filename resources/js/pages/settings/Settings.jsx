@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Bell, BookOpen, CircleHelp, Eye, EyeOff, KeyRound, LockKeyhole, Mail, MessageSquareWarning, ShieldCheck, Smartphone } from 'lucide-react';
+import { Bell, BookOpen, CircleHelp, Eye, EyeOff, KeyRound, LockKeyhole, Mail, MessageSquareWarning, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, Field, InfoRow, PageHeader } from '../../components/common';
 import { useAuth } from '../../contexts/AuthContext';
@@ -116,18 +116,19 @@ function NotificationsSection({ user }) {
     );
 }
 
-function TwoFactorSection({ user }) {
+function AccountAccessSection({ user }) {
     return (
-        <Card title="Two-Factor Authentication">
-            <div className="space-y-3">
-                <SectionIntro icon={Smartphone} title={user?.two_factor_enabled ? '2FA Enabled' : '2FA Disabled'} copy="Two-factor authentication setup is not fully enabled yet." />
-                <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white p-3">
-                    <span className="min-w-0">
-                        <span className="block text-sm font-bold text-slate-950">Require verification code</span>
-                        <span className="mt-1 block text-xs leading-5 text-slate-500">Placeholder control for the planned 2FA workflow.</span>
-                    </span>
-                    <input type="checkbox" className="h-5 w-5 shrink-0 accent-[#1a4731]" checked={Boolean(user?.two_factor_enabled)} disabled readOnly />
-                </label>
+        <Card title="Account Access">
+            <div className="space-y-4">
+                <SectionIntro icon={ShieldCheck} title="Verified System Access" copy="Your account access is controlled by your assigned role and administrator-managed permissions." />
+                <div className="grid gap-2 text-sm">
+                    <InfoRow label="Account Role" value={roleLabel(user?.role)} />
+                    <InfoRow label="Account Status" value={user?.status || 'Active'} />
+                    <InfoRow label="Password Security" value="Use Change Password to keep your sign-in credentials current." />
+                </div>
+                <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold leading-5 text-emerald-800">
+                    Contact a TARSIS administrator if your access level, assigned barangays, or account status needs to be updated.
+                </p>
             </div>
         </Card>
     );
@@ -143,7 +144,7 @@ function PrivacySection({ user }) {
 
     return (
         <div className="grid gap-4 xl:grid-cols-2">
-            <TwoFactorSection user={user} />
+            <AccountAccessSection user={user} />
             <Card title="Privacy & Security">
                 <div className="space-y-4">
                     <SectionIntro icon={ShieldCheck} title="Security Options" copy="Protect your account and registry record." />
@@ -261,4 +262,10 @@ function formatDateTime(value) {
         hour: 'numeric',
         minute: '2-digit',
     }).format(new Date(value));
+}
+
+function roleLabel(role) {
+    return String(role || 'User Account')
+        .replaceAll('_', ' ')
+        .replace(/\b\w/g, (character) => character.toUpperCase());
 }

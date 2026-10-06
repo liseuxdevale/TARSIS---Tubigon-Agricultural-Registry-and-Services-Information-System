@@ -66,7 +66,7 @@ export default function AnnouncementsFeed({ announcements = [] }) {
                         <p className="mb-1 text-xs font-semibold uppercase tracking-[0.22em] text-[#c8952a]">Latest Updates</p>
                         <h2 className="text-2xl font-bold text-slate-950 sm:text-3xl">MAO Announcements and Programs</h2>
                     </div>
-                    <Link className="inline-flex items-center gap-1 text-sm font-semibold text-[#1a4731] transition hover:opacity-75" to="/announcements">
+                    <Link className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-sm font-semibold text-[#1a4731] transition hover:opacity-75" to="/announcements">
                         View all <ArrowRight className="h-4 w-4" aria-hidden="true" />
                     </Link>
                 </div>

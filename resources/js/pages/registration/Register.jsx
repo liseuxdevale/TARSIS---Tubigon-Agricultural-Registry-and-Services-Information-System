@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Card, PageHeader, StatusBadge } from '../../components/common';
+import { Card, PageHeader, PageLoader, StatusBadge } from '../../components/common';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import { assignedBarangayIds, isBarangayScoped, sectorAdminRoles } from '../../utils/rbac';
 import { registrantSectorLabel } from '../../utils/registrantLabels';
 import DigitalID from './DigitalID';
+import RsbsaTemplateFirstRenderer from '../../components/rsbsa/RsbsaTemplateFirstRenderer';
 
 const educationOptions = ['Pre-school', 'Elementary', 'High School (non K-12)', 'Junior High School (K-12)', 'Senior High School (K-12)', 'College', 'Vocational', 'Post-graduate', 'None'];
 const livelihoodOptions = ['Farmer', 'Farmworker/Laborer', 'Fisherfolk', 'Agri Youth'];
@@ -113,6 +114,9 @@ export default function Register() {
     const [referenceRegistrant, setReferenceRegistrant] = useState(null);
     const [referenceLookupLoading, setReferenceLookupLoading] = useState(false);
     const [referenceLookupError, setReferenceLookupError] = useState('');
+    const [linkedRegistrant, setLinkedRegistrant] = useState(null);
+    const [linkedRegistrantLoading, setLinkedRegistrantLoading] = useState(false);
+    const [showRegistrationForm, setShowRegistrationForm] = useState(false);
     const staffRoles = ['super_admin', 'mao_staff', 'barangay_technical_staff', ...sectorAdminRoles];
     const isStaff = staffRoles.includes(user?.role);
     const isBeneficiaryUser = Boolean(user) && !isStaff;
@@ -165,6 +169,39 @@ export default function Register() {
             email: user.email || current.email,
         }));
     }, [user, isStaff]);
+
+    useEffect(() => {
+        if (!isBeneficiaryUser) return undefined;
+
+        let active = true;
+        setLinkedRegistrantLoading(true);
+
+        api.get('/tracking/me')
+            .then((response) => {
+                if (!active) return;
+                const registrant = response.data.registrant || null;
+                setLinkedRegistrant(registrant);
+                if (registrant) {
+                    setReferenceRegistrant(registrant);
+                    populateFormFromReference(registrant);
+                    setShowRegistrationForm(false);
+                } else {
+                    setShowRegistrationForm(true);
+                }
+            })
+            .catch(() => {
+                if (!active) return;
+                setLinkedRegistrant(null);
+                setShowRegistrationForm(true);
+            })
+            .finally(() => {
+                if (active) setLinkedRegistrantLoading(false);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [isBeneficiaryUser]);
 
     useEffect(() => {
         localStorage.setItem('rsbsa-registration-draft', JSON.stringify(form));
@@ -321,6 +358,8 @@ export default function Register() {
     }
 
     function changeEnrollmentType(value) {
+        if (isBeneficiaryUser && linkedRegistrant && value === 'New') return;
+
         if (value === 'Updating') {
             update('enrollment_type', value);
             return;
@@ -454,7 +493,7 @@ export default function Register() {
             if (updatesExistingRegistrant) body.append('_method', 'PUT');
             const response = updatesExistingRegistrant
                 ? await api.post(`/registrants/${referenceRegistrant.id}`, body, { headers: { 'Content-Type': undefined } })
-                : await api.post(isStaff ? '/registrants' : '/public/registrants', body, { headers: { 'Content-Type': undefined } });
+                : await api.post('/registrants', body, { headers: { 'Content-Type': undefined } });
             localStorage.removeItem('rsbsa-registration-draft');
             setSaved(response.data);
             navigate(`/rsbsa-preview/${response.data.registry_number}`);
@@ -480,13 +519,57 @@ export default function Register() {
     }
 
     const selectedBarangay = barangays.find((barangay) => String(barangay.id) === String(form.barangay_id));
+    const linkedRegistryNumber = linkedRegistrant?.registry_number;
+
+    if (isBeneficiaryUser && linkedRegistrantLoading) return <PageLoader />;
+
+    if (isBeneficiaryUser && linkedRegistrant && !showRegistrationForm) {
+        return (
+            <section className="space-y-5 pb-8">
+                <PageHeader
+                    title="RSBSA Registration"
+                    description="Review your submitted RSBSA form. Use Edit to update your registration details."
+                    actions={(
+                        <>
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => {
+                                    setReferenceRegistrant(linkedRegistrant);
+                                    populateFormFromReference(linkedRegistrant);
+                                    setShowRegistrationForm(true);
+                                }}
+                            >
+                                Edit Registration
+                            </button>
+                            {linkedRegistryNumber && (
+                                <Link className="btn-primary" to={`/rsbsa-preview/${encodeURIComponent(linkedRegistryNumber)}/mao-id`}>
+                                    View MAO ID
+                                </Link>
+                            )}
+                        </>
+                    )}
+                />
+                <Card title="Filled RSBSA Form">
+                    <ResponsiveLinkedRsbsaPreview registrant={linkedRegistrant} />
+                </Card>
+            </section>
+        );
+    }
 
     return (
         <section className="space-y-5 pb-8">
             <PageHeader
                 title="RSBSA Registration"
                 description="Modern government portal registration form for agriculture sector enrollment."
-                actions={saved && <Link className="btn-secondary" to={`/rsbsa-preview/${saved.registry_number}`}>Open Print Preview</Link>}
+                actions={(
+                    <>
+                        {isBeneficiaryUser && linkedRegistrant && (
+                            <button type="button" className="btn-secondary" onClick={() => setShowRegistrationForm(false)}>Back to RSBSA Form</button>
+                        )}
+                        {saved && <Link className="btn-secondary" to={`/rsbsa-preview/${saved.registry_number}`}>Open Print Preview</Link>}
+                    </>
+                )}
             />
             {submitError && <div role="alert" className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">Submission failed: {submitError}</div>}
             {barangayScoped && (
@@ -507,7 +590,15 @@ export default function Register() {
                 <ModernSection id="reference" title="Reference Information">
                     <Field label="Registry Number"><input className="field" disabled value="Generated after submission" /></Field>
                     <Field label="Date Administered" required><input required type="date" className="field" value={form.date_administered} onChange={(event) => update('date_administered', event.target.value)} /></Field>
-                    <RadioGroup label="Enrollment Type" name="enrollment_type" value={form.enrollment_type} options={['New', 'Updating']} onChange={changeEnrollmentType} required />
+                    <RadioGroup
+                        label="Enrollment Type"
+                        name="enrollment_type"
+                        value={form.enrollment_type}
+                        options={['New', 'Updating']}
+                        disabledOptions={isBeneficiaryUser && linkedRegistrant ? ['New'] : []}
+                        onChange={changeEnrollmentType}
+                        required
+                    />
                     {form.enrollment_type === 'Updating' && (
                         <>
                             {isStaff && (
@@ -676,6 +767,45 @@ export default function Register() {
     );
 }
 
+function ResponsiveLinkedRsbsaPreview({ registrant }) {
+    const frameRef = React.useRef(null);
+    const formRef = React.useRef(null);
+    const [fit, setFit] = useState({ scale: 1, height: 0 });
+
+    useEffect(() => {
+        const frame = frameRef.current;
+        const form = formRef.current;
+        if (!frame || !form) return undefined;
+
+        const updateFit = () => {
+            const naturalWidth = form.scrollWidth || 1240;
+            const naturalHeight = form.scrollHeight || 0;
+            const availableWidth = frame.clientWidth || naturalWidth;
+            const scale = Math.min(1, availableWidth / naturalWidth);
+            setFit({ scale, height: naturalHeight * scale });
+        };
+
+        updateFit();
+        const observer = new ResizeObserver(updateFit);
+        observer.observe(frame);
+        observer.observe(form);
+        window.addEventListener('orientationchange', updateFit);
+
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('orientationchange', updateFit);
+        };
+    }, [registrant?.id]);
+
+    return (
+        <div ref={frameRef} className="rsbsa-preview-fit" style={{ height: fit.height || undefined }}>
+            <div ref={formRef} className="rsbsa-preview-fit-inner" style={{ transform: `scale(${fit.scale})` }}>
+                <RsbsaTemplateFirstRenderer registrant={registrant} showGrid={false} />
+            </div>
+        </div>
+    );
+}
+
 function BarangaySelectionGate({ barangays, loading, error, value, onChange, onContinue }) {
     return (
         <section className="space-y-5 pb-8">
@@ -758,17 +888,20 @@ function Field({ label, required = false, children }) {
     );
 }
 
-function RadioGroup({ label, name, value, options, onChange, required = false }) {
+function RadioGroup({ label, name, value, options, onChange, required = false, disabledOptions = [] }) {
     return (
         <fieldset>
             <legend className="mb-2 text-sm font-semibold text-slate-700">{label}{required && <span className="text-red-600"> *</span>}</legend>
             <div className="flex min-h-11 flex-wrap gap-x-5 gap-y-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                {options.map((option) => (
-                    <label key={option} className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                        <input required={required} type="radio" name={name} checked={value === option} onChange={() => onChange(option)} />
-                        {option}
-                    </label>
-                ))}
+                {options.map((option) => {
+                    const disabled = disabledOptions.includes(option);
+                    return (
+                        <label key={option} className={`flex items-center gap-2 text-sm font-medium ${disabled ? 'cursor-not-allowed text-slate-400' : 'text-slate-700'}`}>
+                            <input required={required} disabled={disabled} type="radio" name={name} checked={value === option} onChange={() => onChange(option)} />
+                            {option}
+                        </label>
+                    );
+                })}
             </div>
         </fieldset>
     );
@@ -870,7 +1003,7 @@ function ReferenceRegistrantDetails({ registrant, loading, error }) {
                         <ReferenceDetail label="Name" value={registrant.full_name || [registrant.first_name, registrant.middle_name, registrant.last_name, registrant.suffix].filter(Boolean).join(' ')} />
                         <ReferenceDetail label="Sector" value={registrantSectorLabel(registrant.sector)} />
                         <ReferenceDetail label="Barangay" value={registrant.barangay?.name} />
-                        <ReferenceDetail label="Birthday" value={registrant.birthday} />
+                        <ReferenceDetail label="Birthday" value={dateOnly(registrant.birthday)} />
                         <ReferenceDetail label="Sex" value={registrant.sex} />
                         <ReferenceDetail label="Civil Status" value={registrant.civil_status} />
                         <ReferenceDetail label="Phone" value={registrant.phone} />
@@ -947,7 +1080,7 @@ function ParcelCard({ parcel, parcelIndex, barangays, canRemove, updateParcel, u
                     </select>
                 </Field>
                 <Field label="Municipality" required><input required className="field" value={parcel.location_municipality} onChange={(event) => updateParcel(parcelIndex, 'location_municipality', event.target.value)} /></Field>
-                <Field label="Total Area" required><input required min="0.0001" step="0.0001" type="number" className="field" value={parcel.total_area} onChange={(event) => updateParcel(parcelIndex, 'total_area', event.target.value)} /></Field>
+                <Field label="Total Area" required><input required min="0.01" step="0.01" type="number" className="field" value={parcel.total_area} onChange={(event) => updateParcel(parcelIndex, 'total_area', decimalValue(event.target.value))} /></Field>
                 <Field label="Ownership Document No."><input className="field" value={parcel.ownership_document_number} onChange={(event) => updateParcel(parcelIndex, 'ownership_document_number', event.target.value)} /></Field>
                 <Field label="Ownership Type" required><select required className="field" value={parcel.ownership_type} onChange={(event) => updateParcel(parcelIndex, 'ownership_type', event.target.value)}>{parcelOwnershipTypes.map((option) => <option key={option}>{option}</option>)}</select></Field>
                 {['Tenant', 'Lessee'].includes(parcel.ownership_type) && <Field label="Land Owner Name" required><input required className="field" value={parcel.owner_name} onChange={(event) => updateParcel(parcelIndex, 'owner_name', event.target.value)} /></Field>}
@@ -968,7 +1101,7 @@ function ParcelCard({ parcel, parcelIndex, barangays, canRemove, updateParcel, u
                         {parcel.commodities.map((commodity, commodityIndex) => (
                             <tr key={commodityIndex}>
                                 <td className="p-2"><input required className="field" value={commodity.commodity} onChange={(event) => updateCommodity(parcelIndex, commodityIndex, 'commodity', event.target.value)} /></td>
-                                <td className="p-2"><input required min="0.0001" step="0.0001" type="number" className="field" value={commodity.size} onChange={(event) => updateCommodity(parcelIndex, commodityIndex, 'size', event.target.value)} /></td>
+                                <td className="p-2"><input required min="0.01" step="0.01" type="number" className="field" value={commodity.size} onChange={(event) => updateCommodity(parcelIndex, commodityIndex, 'size', decimalValue(event.target.value))} /></td>
                                 <td className="p-2"><input required min="0" type="number" className="field" value={commodity.heads} onChange={(event) => updateCommodity(parcelIndex, commodityIndex, 'heads', event.target.value)} /></td>
                                 <td className="p-2"><select required className="field" value={commodity.farm_type} onChange={(event) => updateCommodity(parcelIndex, commodityIndex, 'farm_type', event.target.value)}><option value="">Select</option><option value="1">1 - Irrigated</option><option value="2">2 - Rainfed Upland</option><option value="3">3 - Rainfed Lowland</option></select></td>
                                 <td className="p-2"><select className="field" value={commodity.organic_practitioner} onChange={(event) => updateCommodity(parcelIndex, commodityIndex, 'organic_practitioner', event.target.value)}><option value="">Select</option><option>No</option><option>Yes</option></select></td>
@@ -1082,7 +1215,7 @@ function normalizeParcels(parcels) {
         ...parcel,
         location_barangay: stringValue(parcel.location_barangay),
         location_municipality: stringValue(parcel.location_municipality || 'Tubigon'),
-        total_area: stringValue(parcel.total_area),
+        total_area: decimalValue(parcel.total_area),
         ownership_document_number: stringValue(parcel.ownership_document_number),
         ancestral_domain: yesNoValue(parcel.ancestral_domain),
         agrarian_reform_beneficiary: yesNoValue(parcel.agrarian_reform_beneficiary),
@@ -1097,7 +1230,7 @@ function normalizeCommodities(commodities) {
     const rows = Array.isArray(commodities) && commodities.length ? commodities : [emptyCommodity()];
     return rows.slice(0, MAX_COMMODITIES_PER_PARCEL).map((commodity) => ({
         commodity: stringValue(commodity.commodity),
-        size: stringValue(commodity.size),
+        size: decimalValue(commodity.size),
         heads: stringValue(commodity.heads),
         farm_type: stringValue(commodity.farm_type),
         organic_practitioner: yesNoValue(commodity.organic_practitioner, ''),
@@ -1107,6 +1240,16 @@ function normalizeCommodities(commodities) {
 
 function stringValue(value) {
     return value === null || value === undefined ? '' : String(value);
+}
+
+function decimalValue(value) {
+    const [whole = '', decimal = ''] = stringValue(value)
+        .replace(/[^\d.]/g, '')
+        .split('.');
+    const normalizedWhole = whole || (decimal ? '0' : '');
+    const normalizedDecimal = decimal.slice(0, 2);
+
+    return stringValue(value).includes('.') ? `${normalizedWhole}.${normalizedDecimal}` : normalizedWhole;
 }
 
 function yesNoValue(value, fallback = 'No') {

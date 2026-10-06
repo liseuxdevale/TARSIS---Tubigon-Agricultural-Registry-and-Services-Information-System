@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { cx } from '../../utils/format';
 
 export function PageHeader({ title, description, actions }) {
@@ -64,7 +64,16 @@ export function SearchBar({ value, onChange, placeholder = 'Search' }) {
     return <input className="field" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />;
 }
 
-export function DataTable({ columns, rows, compact = false }) {
+export function DataTable({ columns, rows, compact = false, pageSize = 10 }) {
+    const [page, setPage] = useState(1);
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    const currentPage = Math.min(page, totalPages);
+    const paginatedRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+    useEffect(() => {
+        setPage((value) => Math.min(value, totalPages));
+    }, [totalPages]);
+
     return (
         <div className="min-w-0 overflow-hidden border bg-white" style={{ borderColor: 'var(--role-border)', borderRadius: 'calc(var(--role-radius) * 1.2)', boxShadow: 'var(--role-shadow)' }}>
             <div className="overflow-x-auto">
@@ -75,7 +84,7 @@ export function DataTable({ columns, rows, compact = false }) {
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                    {rows.map((row, index) => (
+                    {paginatedRows.map((row, index) => (
                         <tr key={index} className="transition hover:bg-green-50/30">
                             {row.map((cell, cellIndex) => <td key={cellIndex} className="px-4 py-3 align-top text-gray-600">{cell || <span className="text-gray-400">Not set</span>}</td>)}
                         </tr>
@@ -84,6 +93,19 @@ export function DataTable({ columns, rows, compact = false }) {
             </table>
             </div>
             {!rows.length && <p className="p-6 text-center text-sm text-gray-500">No records found.</p>}
+            {rows.length > pageSize && (
+                <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-4 py-3 text-sm text-gray-600">
+                    <span>Page {currentPage} of {totalPages}</span>
+                    <button className="inline-flex items-center gap-2 font-semibold text-gray-700 disabled:cursor-not-allowed disabled:opacity-45" type="button" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-base leading-none">&lt;</span>
+                        <span>Previous</span>
+                    </button>
+                    <button className="inline-flex items-center gap-2 font-semibold text-gray-700 disabled:cursor-not-allowed disabled:opacity-45" type="button" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>
+                        <span>Next</span>
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-base leading-none">&gt;</span>
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

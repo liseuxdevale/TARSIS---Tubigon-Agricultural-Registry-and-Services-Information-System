@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="TARSIS">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2e7d32"/>
+      <stop offset="1" stop-color="#1b5e20"/>
+    </linearGradient>
+    <linearGradient id="b" x1="0" y1=".2" x2="1" y2="1">
+      <stop offset="0" stop-color="#1687bd"/>
+      <stop offset="1" stop-color="#0b6fa8"/>
+    </linearGradient>
+    <clipPath id="clip"><circle cx="120" cy="120" r="118"/></clipPath>
+  </defs>
+  <circle cx="120" cy="120" r="120" fill="#ffffff"/>
+  <g clip-path="url(#clip)">
+    <rect width="240" height="121" fill="url(#g)"/>
+    <rect y="121" width="240" height="119" fill="url(#b)"/>
+  </g>
+  <circle cx="120" cy="120" r="113" fill="none" stroke="#ffffff" stroke-width="10"/>
+  <g fill="none" stroke="#d6b14a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M120 196V44"/>
+    <path d="M106 172c-34-4-62-22-79-49 35-2 66 14 79 49z"/>
+    <path d="M134 172c34-4 62-22 79-49-35-2-66 14-79 49z"/>
+    <path d="M72 130c-4 22 12 40 39 56"/>
+    <path d="M168 130c4 22-12 40-39 56"/>
+  </g>
+  <g fill="#d6b14a">
+    <path d="M120 32c22 24 22 46 0 68-22-22-22-44 0-68z"/>
+    <path d="M91 67c29 8 42 27 38 55-30-7-44-25-38-55z"/>
+    <path d="M149 67c-29 8-42 27-38 55 30-7 44-25 38-55z"/>
+    <path d="M85 108c31 8 46 28 41 59-32-8-48-28-41-59z"/>
+    <path d="M155 108c-31 8-46 28-41 59 32-8 48-28 41-59z"/>
+  </g>
+</svg>

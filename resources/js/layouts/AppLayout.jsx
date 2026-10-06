@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Archive, BarChart2, Bell, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, FileText, History, IdCard, LayoutDashboard, LocateFixed, LogOut, Map as MapIcon, MapPin, Megaphone, Menu, Moon, Settings, Shield, Sun, UserCog, UserRound, Users, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { Modal } from '../components/common';
 import { roleTheme } from './RoleThemeLayout';
 import { cx } from '../utils/format';
 import { can, ROLES, sectorAdminRoles } from '../utils/rbac';
@@ -31,12 +32,16 @@ function Header({ theme }) {
     const { user, signedIn, logout } = useAuth();
     const navigate = useNavigate();
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [logoutPromptOpen, setLogoutPromptOpen] = useState(false);
 
     const signOut = () => {
-        if (!window.confirm('Are you sure you want to log out?')) return;
+        setLogoutPromptOpen(true);
+    };
 
+    const confirmSignOut = () => {
+        setLogoutPromptOpen(false);
         logout();
-        navigate('/', { replace: true });
+        window.location.assign('/');
     };
 
     const primary = [
@@ -88,7 +93,7 @@ function Header({ theme }) {
                 <AccountPanel signedIn={signedIn} user={user} logout={signOut} />
             </aside>
             <header className="sticky top-0 z-30 border-b text-white shadow-lg backdrop-blur lg:hidden" style={{ borderColor: 'color-mix(in srgb, var(--role-accent) 32%, transparent)', background: 'var(--role-sidebar)' }}>
-                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="relative flex items-center justify-between gap-3 px-4 py-3 pr-24">
                     <button
                         type="button"
                         className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-white ring-1 ring-white/20"
@@ -97,7 +102,9 @@ function Header({ theme }) {
                     >
                         <Menu className="h-5 w-5" />
                     </button>
-                    <BrandBlock compact />
+                    <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+                        <BrandBlock compact />
+                    </div>
                     {!signedIn && <Link className="btn-primary" to="/login">Log in</Link>}
                 </div>
             </header>
@@ -119,13 +126,35 @@ function Header({ theme }) {
                     </aside>
                 </div>
             )}
+            <LogoutConfirmModal
+                open={logoutPromptOpen}
+                user={user}
+                onCancel={() => setLogoutPromptOpen(false)}
+                onConfirm={confirmSignOut}
+            />
         </>
+    );
+}
+
+function LogoutConfirmModal({ open, user, onCancel, onConfirm }) {
+    return (
+        <Modal open={open} title="Sign Out" onClose={onCancel}>
+            <div className="space-y-4">
+                <p className="text-sm leading-6 text-gray-600">
+                    Are you sure you want to sign out?
+                </p>
+                <div className="flex justify-end gap-2">
+                    <button className="btn-secondary" type="button" onClick={onCancel}>Cancel</button>
+                    <button className="btn-primary" type="button" onClick={onConfirm}>Confirm</button>
+                </div>
+            </div>
+        </Modal>
     );
 }
 
 function TopRightActions({ user, darkMode, onToggleDarkMode }) {
     return (
-        <div className="fixed right-3 top-20 z-[2100] flex items-center gap-2 lg:right-4 lg:top-4">
+        <div className="fixed right-3 top-3 z-[2100] flex items-center gap-1.5 lg:right-4 lg:top-4 lg:gap-2">
             {user && <NotificationButton user={user} />}
             <ThemeToggle darkMode={darkMode} onToggle={onToggleDarkMode} />
         </div>
@@ -214,7 +243,7 @@ function NotificationButton({ user }) {
         <div ref={panelRef} className="relative">
             <button
                 type="button"
-                className="relative inline-flex h-11 w-11 items-center justify-center rounded-full border shadow-lg transition hover:-translate-y-0.5 focus:outline-none focus:ring-2"
+                className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border shadow-lg transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 lg:h-11 lg:w-11"
                 style={{
                     background: 'var(--role-surface)',
                     borderColor: 'var(--role-border)',
@@ -227,7 +256,7 @@ function NotificationButton({ user }) {
                 title="Notifications"
                 onClick={() => setOpen((value) => !value)}
             >
-                <Bell className="h-5 w-5" />
+                <Bell className="h-4 w-4 lg:h-5 lg:w-5" />
                 {unreadCount > 0 && (
                     <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#c8952a] px-1 text-[10px] font-black text-white ring-2 ring-white">
                         {unreadCount > 9 ? '9+' : unreadCount}
@@ -236,7 +265,7 @@ function NotificationButton({ user }) {
             </button>
 
             {open && (
-                <div className={cx('absolute right-0 mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-2xl shadow-slate-950/20', expanded ? 'w-[min(560px,calc(100vw-2rem))]' : 'w-[min(360px,calc(100vw-2rem))]')}>
+                <div className={cx('absolute -right-12 mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-2xl shadow-slate-950/20 lg:right-0', expanded ? 'w-[min(560px,calc(100vw-1rem))]' : 'w-[min(360px,calc(100vw-1rem))]')}>
                     <div className="border-b border-slate-100 p-3">
                         <div className="flex items-center justify-between gap-3">
                             <h2 className="text-sm font-black">Notifications</h2>
@@ -377,7 +406,7 @@ function ThemeToggle({ darkMode, onToggle }) {
     return (
         <button
             type="button"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full border shadow-lg transition hover:-translate-y-0.5 focus:outline-none focus:ring-2"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border shadow-lg transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 lg:h-11 lg:w-11"
             style={{
                 background: 'var(--role-surface)',
                 borderColor: 'var(--role-border)',
@@ -389,14 +418,21 @@ function ThemeToggle({ darkMode, onToggle }) {
             aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             title={darkMode ? 'Light mode' : 'Dark mode'}
         >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-4 w-4 lg:h-5 lg:w-5" />
         </button>
     );
 }
 
 function BrandBlock({ compact = false }) {
     return (
-        <Link to="/" className={cx('flex min-w-0 items-center', compact ? '' : 'border-b border-white/10 p-4')}>
+        <Link to="/" className={cx('flex min-w-0 items-center gap-3', compact ? '' : 'border-b border-white/10 p-4')}>
+            <img
+                src="/images/tarsis-official-logo.jpg"
+                width={compact ? 44 : 52}
+                height={compact ? 44 : 52}
+                className="shrink-0 rounded-full border border-white/20 bg-white object-cover shadow-sm"
+                alt="Office of the Municipal Agriculture Tubigon, Bohol official logo"
+            />
             <span className="min-w-0">
                 <span className={cx('block font-bold leading-tight', compact ? 'text-xl text-white' : 'text-sm text-white')}>TARSIS</span>
                 <span className="block text-xs text-white/75">Tubigon MAO</span>

@@ -19,7 +19,6 @@ Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/auth/register', [AuthController::class, 'register']);
 Route::get('/public/registrants/{registryNumber}/rsbsa-preview', [RegistrantController::class, 'rsbsaPreview']);
 Route::get('/public/registrants/{registryNumber}', [RegistrantController::class, 'publicProfile']);
-Route::post('/public/registrants', [RegistrantController::class, 'store']);
 Route::get('/barangays', [BarangayController::class, 'index']);
 Route::get('/announcements', [AnnouncementController::class, 'index']);
 Route::middleware('jwt')->get('/announcements/visible', [AnnouncementController::class, 'index']);

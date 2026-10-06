@@ -30,7 +30,15 @@ const insuranceStatusLabels = {
 
 const insuranceClaimTypes = ['farmer', 'fisherfolk', 'poultry', 'livestock', 'personal'];
 const insuranceFormStatuses = [...insuranceApprovalStatuses, 'released'];
-const assistanceTypes = ['farm', 'fisheries', 'livestock', 'poultry', 'crop_damage', 'livestock_loss', 'other'];
+const assistanceTypes = ['fisheries', 'crop', 'livestock', 'poultry', 'livestock_loss', 'other'];
+
+const insuranceClaimTypeLabels = {
+    farmer: 'farmer',
+    fisherfolk: 'fisherfolk',
+    poultry: 'poultry',
+    livestock: 'livestock',
+    personal: 'personal',
+};
 
 const sectorLabels = {
     farmer: 'Farmer',
@@ -88,7 +96,7 @@ export default function ServicePage({ kind }) {
                     <Field label="Search Records">
                         <SearchBar value={search} onChange={setSearch} placeholder="Search beneficiary, sector, claim, or status" />
                     </Field>
-                    {!hideType && <FilterSelect label="Type" value={filters.type} options={serviceTypeOptions(rows, kind)} onChange={(type) => setFilters({ ...filters, type })} />}
+                    {!hideType && <FilterSelect label="Type" value={filters.type} options={serviceTypeOptions(rows, kind)} labels={isAssistance ? {} : insuranceClaimTypeLabels} onChange={(type) => setFilters({ ...filters, type })} />}
                     <FilterSelect label="Status" value={filters.status} options={isAssistance ? assistanceStatuses : insuranceTimelineStatuses} labels={isAssistance ? assistanceStatusLabels : insuranceStatusLabels} onChange={(status) => setFilters({ ...filters, status })} />
                 </div>
                 <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-sm text-slate-500">
@@ -117,7 +125,7 @@ export default function ServicePage({ kind }) {
                             : compactTypeCells([
                                 row.registrant?.full_name,
                                 row.policy_number || row.calamity_event || 'Insurance claim',
-                                normalizeInsuranceClaimType(row.claim_type),
+                                insuranceClaimTypeLabel(row.claim_type),
                                 <StatusBadge status={insuranceDisplayStatus(row)} />,
                                 <div className="space-y-2">
                                     <StatusTimeline statuses={insuranceTimelineStatuses} active={insuranceTimelineActive(row)} />
@@ -375,7 +383,7 @@ function AssistanceFields({ form, update }) {
 function InsuranceFields({ form, update }) {
     return (
         <>
-            <Field label="Claim Type"><Select value={form.claim_type} options={insuranceClaimTypes} onChange={(value) => update('claim_type', value)} /></Field>
+            <Field label="Claim Type"><Select value={form.claim_type} options={insuranceClaimTypes} labels={insuranceClaimTypeLabels} onChange={(value) => update('claim_type', value)} /></Field>
             <Field label="Calamity/Event"><input className="field" value={form.calamity_event} onChange={(event) => update('calamity_event', event.target.value)} /></Field>
             <Field label="Incident Date"><input type="date" className="field" value={form.incident_date} onChange={(event) => update('incident_date', event.target.value)} /></Field>
             <Field label="Estimated Loss"><input type="number" step="0.01" className="field" value={form.estimated_loss} onChange={(event) => update('estimated_loss', event.target.value)} /></Field>
@@ -461,7 +469,9 @@ const insuranceTimelineStatuses = ['claim_submitted', 'documents_verified', 'for
 
 function serviceTypeOptions(rows, kind) {
     const field = kind === 'assistance' ? 'assistance_type' : 'claim_type';
-    return Array.from(new Set(rows.map((row) => kind === 'assistance' ? normalizeAssistanceType(row[field]) : normalizeInsuranceClaimType(row[field])).filter(Boolean)));
+    const options = rows.map((row) => kind === 'assistance' ? normalizeAssistanceType(row[field]) : normalizeInsuranceClaimType(row[field])).filter(Boolean);
+    if (kind !== 'assistance') options.unshift(...insuranceClaimTypes);
+    return Array.from(new Set(options));
 }
 
 function serviceTypeValue(row, kind) {
@@ -469,7 +479,10 @@ function serviceTypeValue(row, kind) {
 }
 
 function normalizeAssistanceType(type) {
-    return type === 'farm input' ? 'farm' : type;
+    const normalized = String(type || '').toLowerCase();
+    if (['farm', 'farm input', 'rice seeds', 'rice_seeds'].includes(normalized)) return 'fisheries';
+    if (normalized === 'crop_damage') return 'crop';
+    return type;
 }
 
 function assistanceTypeLabel(type) {
@@ -479,7 +492,13 @@ function assistanceTypeLabel(type) {
 function normalizeInsuranceClaimType(type) {
     if (type === 'crop') return 'farmer';
     if (type === 'boat') return 'fisherfolk';
+    if (type === 'poultry raiser') return 'poultry';
+    if (type === 'livestock raiser') return 'livestock';
     return type;
+}
+
+function insuranceClaimTypeLabel(type) {
+    return insuranceClaimTypeLabels[normalizeInsuranceClaimType(type)] || normalizeInsuranceClaimType(type);
 }
 
 function serviceStatusValue(row, kind) {

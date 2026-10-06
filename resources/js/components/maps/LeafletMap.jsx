@@ -135,7 +135,7 @@ export default function LeafletMap({ barangays = [], geoLocations = [], selected
         marker.openPopup();
     }, [selected]);
 
-    return <div ref={holderRef} className={`h-[70vh] min-h-[560px] w-full overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50 shadow-sm ${className}`} />;
+    return <div ref={holderRef} className={`h-[calc(100vh-12rem)] min-h-[760px] w-full overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50 shadow-sm ${className}`} />;
 }
 
 function sameCoordinate(first, second) {

@@ -14,3 +14,4 @@ export function registrantSectorLabel(sector) {
         livestock: 'livestock',
     }[sector] || String(sector || '').replaceAll('_', ' ');
 }
+ 

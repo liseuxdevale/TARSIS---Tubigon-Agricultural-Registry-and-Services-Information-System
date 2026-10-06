@@ -61,8 +61,41 @@ export default function AuditLogs() {
                 <DataTable columns={['Action', 'User', 'Record', 'Timestamp']} rows={rows.map((row) => [row.action, row.user?.name || 'system', row.auditable_type ? `${row.auditable_type.split('\\').pop()} #${row.auditable_id}` : 'system', new Date(row.created_at).toLocaleString()])} />
             </Card>
             <Card title="Login History">
-                <DataTable columns={['User', 'When']} rows={rows.filter((row) => row.action === 'login').map((row) => [row.user?.name || 'system', new Date(row.created_at).toLocaleString()])} />
+                <DataTable
+                    compact
+                    columns={['User', 'When', 'IP Address', 'Browser / Device']}
+                    rows={rows
+                        .filter((row) => row.action === 'login')
+                        .map((row) => [
+                            row.user?.name || 'system',
+                            new Date(row.created_at).toLocaleString(),
+                            row.ip_address || 'Not set',
+                            summarizeUserAgent(row.user_agent),
+                        ])}
+                />
             </Card>
         </section>
     );
+}
+
+function summarizeUserAgent(userAgent) {
+    if (!userAgent) return 'Not set';
+
+    const browser = [
+        ['Edg/', 'Microsoft Edge'],
+        ['Chrome/', 'Chrome'],
+        ['Firefox/', 'Firefox'],
+        ['Safari/', 'Safari'],
+    ].find(([token]) => userAgent.includes(token))?.[1] || 'Browser';
+
+    const device = [
+        ['Windows', 'Windows'],
+        ['Macintosh', 'macOS'],
+        ['Android', 'Android'],
+        ['iPhone', 'iPhone'],
+        ['iPad', 'iPad'],
+        ['Linux', 'Linux'],
+    ].find(([token]) => userAgent.includes(token))?.[1] || 'Device';
+
+    return `${browser} on ${device}`;
 }
