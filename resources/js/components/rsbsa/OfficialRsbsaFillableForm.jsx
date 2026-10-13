@@ -283,7 +283,7 @@ function ParcelOverlay({ parcel, index }) {
         <>
             <Fill value={parcel.location_barangay} left={14.8} top={top + locationTopAdjustment - 1.2} width={29.5} height={1.05} center />
             <Fill value={parcel.location_municipality} left={14.8} top={top + locationTopAdjustment + .10} width={29.5} height={1.05} center />
-            <Fill value={formatArea(parcel.total_area)} left={totalAreaPos.left} top={totalAreaPos.top} width={3.4} height={1.0} center fit scale = {0.88}/>
+            <Fill value={formatArea(parcel.total_area)} left={totalAreaPos.left} top={totalAreaPos.top + 0.2} width={3.4} height={1.0} center fit scale={0.72} />
             <YesNoMarks value={parcel.ancestral_domain} yes={ancestralDomainMarks.yes} no={ancestralDomainMarks.no} />
             <Fill value={parcel.ownership_document_number} left={ownershipDocNoPos.left} top={ownershipDocNoPos.top} width={3.9} height={1.0} center fit scale = {0.88} />
             <YesNoMarks value={parcel.agrarian_reform_beneficiary} yes={agrarianReformMarks.yes} no={agrarianReformMarks.no} />

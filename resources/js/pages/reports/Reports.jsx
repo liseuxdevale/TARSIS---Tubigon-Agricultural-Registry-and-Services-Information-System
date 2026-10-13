@@ -18,38 +18,99 @@ const sectorLabels = {
 export default function Reports() {
     const { user } = useAuth();
     const [sector, setSector] = useState('');
+    const [barangayId, setBarangayId] = useState('');
+    const [monthFrom, setMonthFrom] = useState('');
+    const [monthTo, setMonthTo] = useState('');
+    const [appliedFilters, setAppliedFilters] = useState({ sector: '', barangayId: '' });
+    const { data: barangayData } = useResource(() => api.get('/barangays/scoped?all=1').then((response) => response.data), []);
+    const barangays = Array.isArray(barangayData) ? barangayData : barangayData?.data || [];
     const [assistanceType, setAssistanceType] = useState('');
+    const [insuranceType, setInsuranceType] = useState('');
+    const [trackerDates, setTrackerDates] = useState({ assistance: { from: '', to: '' }, insurance: { from: '', to: '' } });
+    const [appliedDates, setAppliedDates] = useState(trackerDates);
+    const [exportBusy, setExportBusy] = useState({});
+    const [trackerError, setTrackerError] = useState('');
+    async function exportTracker(dataset) {
+        setExportBusy((current) => ({ ...current, [dataset]: true }));
+        setTrackerError('');
+        const query = new URLSearchParams(params);
+        query.set('dataset', dataset);
+        if (appliedDates[dataset].from) query.set('date_from', appliedDates[dataset].from);
+        if (appliedDates[dataset].to) query.set('date_to', appliedDates[dataset].to);
+        if (dataset === 'assistance' && assistanceType) query.set('assistance_type', assistanceType);
+        if (dataset === 'insurance' && insuranceType) query.set('insurance_type', insuranceType);
+        try { await downloadCsv(`/reports/export?${query}`, `tarsis-${dataset}-tracker.csv`); }
+        catch (error) { setTrackerError(error.message || 'Unable to export tracker.'); }
+        finally { setExportBusy((current) => ({ ...current, [dataset]: false })); }
+    }
+    function dateControls(dataset) {
+        return <form className="mb-4 flex flex-wrap items-end gap-3" onSubmit={(event) => {
+            event.preventDefault();
+            const dates = trackerDates[dataset];
+            if (dates.from && dates.to && dates.to < dates.from) { setTrackerError('Date To must be on or after Date From.'); return; }
+            setTrackerError('');
+            setAppliedDates((current) => ({ ...current, [dataset]: { ...dates } }));
+        }}>
+            {['from', 'to'].map((field) => <Field key={field} label={field === 'from' ? 'Date From' : 'Date To'}><input className="field" type="date" value={trackerDates[dataset][field]} onChange={(event) => setTrackerDates((current) => ({ ...current, [dataset]: { ...current[dataset], [field]: event.target.value } }))} /></Field>)}
+            <button className="btn-primary" type="submit">Search</button>
+            <button className="btn-secondary" type="button" disabled={exportBusy[dataset]} onClick={() => exportTracker(dataset)}>{exportBusy[dataset] ? 'Exporting…' : 'Export CSV'}</button>
+        </form>;
+    }
     const scopedSector = roleSector(user);
-    const reportSector = scopedSector || sector;
-    const reportQuery = reportSector ? `?sector=${encodeURIComponent(reportSector)}` : '';
+    const reportSector = scopedSector || appliedFilters.sector;
+    const params = new URLSearchParams();
+    if (reportSector) params.set('sector', reportSector);
+    if (appliedFilters.barangayId) params.set('barangay_id', appliedFilters.barangayId);
+    if (appliedFilters.monthFrom) params.set('month_from', appliedFilters.monthFrom);
+    if (appliedFilters.monthTo) params.set('month_to', appliedFilters.monthTo);
+    Object.entries(appliedDates).forEach(([dataset, dates]) => {
+        if (dates.from) params.set(`${dataset}_from`, dates.from);
+        if (dates.to) params.set(`${dataset}_to`, dates.to);
+    });
+    const reportQuery = params.size ? `?${params.toString()}` : '';
     const { data, loading } = useResource(() => api.get(`/reports/dashboard${reportQuery}`).then((response) => response.data), [reportQuery]);
 
     if (loading || !data) return <PageLoader />;
 
-    const activeSector = scopedSector || data.scope_sector || sector;
+    const activeSector = scopedSector || data.scope_sector || appliedFilters.sector;
     const sectorLabel = sectorLabels[activeSector];
     const monthlyRows = data.monthly_registrants || [];
     const assistanceRows = data.assistance_report || [];
     const assistanceTypeOptions = Array.from(new Set(assistanceRows.map((row) => normalizeAssistanceType(row.assistance_type)).filter(Boolean)));
     const filteredAssistanceRows = assistanceRows.filter((row) => !assistanceType || normalizeAssistanceType(row.assistance_type) === assistanceType);
-    const assistanceGroups = assistanceTypeOptions.map((type) => ({
-        type,
-        total: assistanceRows.filter((row) => normalizeAssistanceType(row.assistance_type) === type).length,
-    }));
 
     return (
         <section className="space-y-4">
+            {trackerError && <p role="alert" className="text-sm text-red-700">{trackerError}</p>}
             <PageHeader
                 title={sectorLabel ? `${sectorLabel} Reports and Analytics` : 'Reports and Analytics'}
                 description={sectorLabel ? `Dashboard totals, barangay distribution, and program reports limited to the ${sectorLabel.toLowerCase()} sector.` : 'Dashboard totals, seasonal/program reports, filters, charts, and exports.'}
                 actions={<ActionGroup><button className="btn-secondary" onClick={() => downloadCsv(`/reports/export${reportQuery}`, 'tarsis-masterlist.csv')}>Export CSV/Excel</button></ActionGroup>}
             />
-            {!roleSector(user) && (
+            {(
                 <Card>
-                    <div className="grid gap-3 md:grid-cols-[220px_1fr]">
-                        <Field label="Seasonal/Sector Filter"><Select value={sector} options={['', ...sectors]} labels={{ '': 'All sectors', ...sectorLabels }} onChange={setSector} /></Field>
-                        <p className="self-end text-sm text-slate-600">Filter changes the report totals, charts, tables, and exported masterlist.</p>
-                    </div>
+                    <form onSubmit={(event) => {
+                        event.preventDefault();
+                        if (monthFrom && monthTo && monthTo < monthFrom) { setTrackerError('Month To must be on or after Month From.'); return; }
+                        setTrackerError('');
+                        setAppliedFilters({ sector, barangayId, monthFrom, monthTo });
+                    }} className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+                        {!scopedSector && <Field label="Seasonal/Sector Filter"><Select value={sector} options={['', ...sectors]} labels={{ '': 'All sectors', ...sectorLabels }} onChange={setSector} /></Field>}
+                        <Field label="Barangay"><Select value={barangayId} options={['', ...barangays.map((barangay) => String(barangay.id))]} labels={{ '': 'All barangays', ...Object.fromEntries(barangays.map((barangay) => [String(barangay.id), barangay.name])) }} onChange={setBarangayId} /></Field>
+                        <Field label="Month From"><input className="field" type="month" value={monthFrom} onChange={(event) => setMonthFrom(event.target.value)} /></Field>
+                        <Field label="Month To"><input className="field" type="month" value={monthTo} min={monthFrom || undefined} onChange={(event) => setMonthTo(event.target.value)} /></Field>
+                        <div className="flex flex-wrap gap-2 self-end">
+                            <button type="submit" className="btn-primary">Search</button>
+                            <button type="button" className="btn-secondary" onClick={() => {
+                                setSector('');
+                                setBarangayId('');
+                                setMonthFrom('');
+                                setMonthTo('');
+                                setAppliedFilters({ sector: '', barangayId: '', monthFrom: '', monthTo: '' });
+                                setTrackerError('');
+                            }}>Clear Filters</button>
+                        </div>
+                    </form>
                 </Card>
             )}
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
@@ -71,19 +132,13 @@ export default function Reports() {
                     />
                 </Card>
             </div>
-            {user?.role === ROLES.SUPER_ADMIN && (
-                <Card title="Super Admin Assistance Report">
+            {[ROLES.SUPER_ADMIN, ROLES.MAO_STAFF].includes(user?.role) && (
+                <Card title="Assistance Tracker">
+                    {dateControls('assistance')}
                     <div className="mb-4 grid gap-3 md:grid-cols-[240px_1fr]">
                         <Field label="Assistance Type">
                             <Select value={assistanceType} options={['', ...assistanceTypeOptions]} labels={{ '': 'All assistance types' }} onChange={setAssistanceType} />
                         </Field>
-                        <div className="flex flex-wrap items-end gap-2">
-                            {assistanceGroups.map((group) => (
-                                <span key={group.type} className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold capitalize text-slate-700">
-                                    {assistanceTypeLabel(group.type)}: {group.total}
-                                </span>
-                            ))}
-                        </div>
                     </div>
                     <DataTable
                         columns={['Assistance Type', 'Sector', 'Applicant/Registrant', 'Application Date', 'Status']}
@@ -93,6 +148,27 @@ export default function Reports() {
                             [row.applicant, row.registry_number].filter(Boolean).join(' - '),
                             formatDate(row.application_date),
                             <StatusBadge status={row.status} />,
+                        ])}
+                    />
+                </Card>
+            )}
+            {[ROLES.SUPER_ADMIN, ROLES.MAO_STAFF].includes(user?.role) && (
+                <Card title="Insurance Tracker">
+                    {dateControls('insurance')}
+                    <div className="mb-4 max-w-xs">
+                        <Field label="Insurance Claim Type">
+                            <Select value={insuranceType} options={['', ...new Set([...(data.insurance_report || []).map((row) => row.insurance_type).filter(Boolean), ...(insuranceType ? [insuranceType] : [])])]} labels={Object.fromEntries([['', 'All insurance claim types'], ...(data.insurance_report || []).map((row) => [row.insurance_type, String(row.insurance_type || '').replaceAll('_', ' ')])])} onChange={setInsuranceType} />
+                        </Field>
+                    </div>
+                    <DataTable
+                        columns={['Insurance Type', 'Sector', 'Applicant/Registrant', 'Application Date', 'Approval Status', 'Release Status']}
+                        rows={(data.insurance_report || []).filter((row) => !insuranceType || row.insurance_type === insuranceType).map((row) => [
+                            String(row.insurance_type || 'Not set').replaceAll('_', ' '),
+                            sectorLabels[row.sector] || row.sector || 'Not set',
+                            [row.applicant, row.registry_number].filter(Boolean).join(' - '),
+                            formatDate(row.application_date),
+                            <StatusBadge status={row.approval_status} />,
+                            <StatusBadge status={row.release_status} />,
                         ])}
                     />
                 </Card>

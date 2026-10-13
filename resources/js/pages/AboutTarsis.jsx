@@ -129,7 +129,7 @@ export default function AboutTarsis() {
 
                         <div className="mt-8">
                             <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Municipal Administrators</h3>
-                            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="mx-auto mt-4 grid w-full max-w-2xl gap-4 sm:grid-cols-2">
                                 {leadershipTeam.map((person) => (
                                     <TeamCard key={person.name} person={person} />
                                 ))}
@@ -174,7 +174,7 @@ function TeamCard({ person }) {
         <article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-950/5">
             <div className="aspect-[4/3] bg-slate-100">
                 {person.photo ? (
-                    <img src={person.photo} alt={person.name} className="h-full w-full object-cover" />
+                    <img src={person.photo} alt={person.name} className="h-full w-full object-cover object-[center_10%]" style={person.photoPosition ? { objectPosition: person.photoPosition } : undefined} />
                 ) : (
                     <div className="flex h-full w-full items-center justify-center bg-[#edf5f1] text-[#1a4731]">
                         <UsersRound className="h-10 w-10" aria-hidden="true" />

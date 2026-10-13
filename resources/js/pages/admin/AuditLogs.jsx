@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, DataTable, Field, PageHeader, SearchBar } from '../../components/common';
 import { api, downloadCsv } from '../../services/api';
+import { formatDateTime } from '../../utils/format';
 
 export default function AuditLogs() {
     const [rows, setRows] = useState([]);
@@ -58,7 +59,7 @@ export default function AuditLogs() {
                 </div>
             </Card>
             <Card title="Activity Table">
-                <DataTable columns={['Action', 'User', 'Record', 'Timestamp']} rows={rows.map((row) => [row.action, row.user?.name || 'system', row.auditable_type ? `${row.auditable_type.split('\\').pop()} #${row.auditable_id}` : 'system', new Date(row.created_at).toLocaleString()])} />
+                <DataTable columns={['Action', 'User', 'Record', 'Timestamp']} rows={rows.map((row) => [row.action, row.user?.name || 'system', row.auditable_type ? `${row.auditable_type.split('\\').pop()} #${row.auditable_id}` : 'system', formatDateTime(row.created_at)])} />
             </Card>
             <Card title="Login History">
                 <DataTable
@@ -68,7 +69,7 @@ export default function AuditLogs() {
                         .filter((row) => row.action === 'login')
                         .map((row) => [
                             row.user?.name || 'system',
-                            new Date(row.created_at).toLocaleString(),
+                            formatDateTime(row.created_at),
                             row.ip_address || 'Not set',
                             summarizeUserAgent(row.user_agent),
                         ])}

@@ -39,21 +39,23 @@ class ArchivedRecordController extends Controller
     {
         $sector = $this->sectorForRole($request->user()?->role);
         $query = AssistanceApplication::query()
-            ->with(['registrant.barangay', 'archivedBy:id,name'])
+            ->with(['registrant' => fn ($query) => $query->withTrashed()->with('barangay'), 'archivedBy:id,name'])
             ->whereNotNull('archived_at')
-            ->when($sector, fn (Builder $query, string $sector) => $query->whereHas('registrant', fn (Builder $registrant) => $registrant->where('sector', $sector)))
+            ->when($sector, fn (Builder $query, string $sector) => $query->whereHas('registrant', fn (Builder $registrant) => $registrant->withTrashed()->where('sector', $sector)))
             ->when($request->search, function (Builder $query, string $search) {
                 $query->where(function (Builder $query) use ($search) {
                     $query->where('id', $search)
                         ->orWhere('assistance_type', 'like', "%{$search}%")
                         ->orWhereHas('registrant', fn (Builder $registrant) => $registrant
+                            ->withTrashed()
+                            ->where(function ($query) use ($search) { $query
                             ->where('registry_number', 'like', "%{$search}%")
                             ->orWhere('first_name', 'like', "%{$search}%")
-                            ->orWhere('last_name', 'like', "%{$search}%"));
+                            ->orWhere('last_name', 'like', "%{$search}%"); }));
                 });
             })
             ->when($request->assistance_type, fn (Builder $query, string $type) => $query->where('assistance_type', $type))
-            ->when($request->barangay_id, fn (Builder $query, string $barangayId) => $query->whereHas('registrant', fn (Builder $registrant) => $registrant->where('barangay_id', $barangayId)))
+            ->when($request->barangay_id, fn (Builder $query, string $barangayId) => $query->whereHas('registrant', fn (Builder $registrant) => $registrant->withTrashed()->where('barangay_id', $barangayId)))
             ->when($request->archived_date, fn (Builder $query, string $date) => $query->whereDate('archived_at', $date))
             ->latest('archived_at');
 
@@ -64,22 +66,24 @@ class ArchivedRecordController extends Controller
     {
         $sector = $this->sectorForRole($request->user()?->role);
         $query = InsuranceClaim::query()
-            ->with(['registrant.barangay', 'archivedBy:id,name'])
+            ->with(['registrant' => fn ($query) => $query->withTrashed()->with('barangay'), 'archivedBy:id,name'])
             ->whereNotNull('archived_at')
-            ->when($sector, fn (Builder $query, string $sector) => $query->whereHas('registrant', fn (Builder $registrant) => $registrant->where('sector', $sector)))
+            ->when($sector, fn (Builder $query, string $sector) => $query->whereHas('registrant', fn (Builder $registrant) => $registrant->withTrashed()->where('sector', $sector)))
             ->when($request->search, function (Builder $query, string $search) {
                 $query->where(function (Builder $query) use ($search) {
                     $query->where('id', $search)
                         ->orWhere('claim_type', 'like', "%{$search}%")
                         ->orWhereHas('registrant', fn (Builder $registrant) => $registrant
+                            ->withTrashed()
+                            ->where(function ($query) use ($search) { $query
                             ->where('registry_number', 'like', "%{$search}%")
                             ->orWhere('first_name', 'like', "%{$search}%")
-                            ->orWhere('last_name', 'like', "%{$search}%"));
+                            ->orWhere('last_name', 'like', "%{$search}%"); }));
                 });
             })
             ->when($request->claim_type, fn (Builder $query, string $type) => $query->where('claim_type', $type))
             ->when($request->claim_status, fn (Builder $query, string $status) => $query->where('previous_status', $status))
-            ->when($request->barangay_id, fn (Builder $query, string $barangayId) => $query->whereHas('registrant', fn (Builder $registrant) => $registrant->where('barangay_id', $barangayId)))
+            ->when($request->barangay_id, fn (Builder $query, string $barangayId) => $query->whereHas('registrant', fn (Builder $registrant) => $registrant->withTrashed()->where('barangay_id', $barangayId)))
             ->when($request->archived_date, fn (Builder $query, string $date) => $query->whereDate('archived_at', $date))
             ->latest('archived_at');
 

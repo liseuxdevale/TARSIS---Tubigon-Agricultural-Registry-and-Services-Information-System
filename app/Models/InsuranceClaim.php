@@ -6,8 +6,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class InsuranceClaim extends Model
 {
+    protected $appends = ['evidence_url'];
+
+    public function getEvidenceUrlAttribute(): ?string
+    {
+        return $this->evidence_path ? asset('storage/'.$this->evidence_path) : null;
+    }
+
     protected $fillable = [
         'registrant_id',
+        'evidence_path',
         'claim_type',
         'policy_number',
         'calamity_event',

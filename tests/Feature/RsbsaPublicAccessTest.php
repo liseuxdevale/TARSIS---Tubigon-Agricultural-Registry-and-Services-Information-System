@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\Barangay;
 use App\Models\AssistanceApplication;
+use App\Models\Barangay;
 use App\Models\Registrant;
 use App\Models\User;
 use App\Services\JwtService;
@@ -19,6 +19,7 @@ class RsbsaPublicAccessTest extends TestCase
 
     public function test_public_profile_only_exposes_approved_records(): void
     {
+        $this->withToken(app(JwtService::class)->issue(User::factory()->create(['role' => 'super_admin', 'status' => 'active'])));
         $registrant = $this->registrant(['status' => 'pending']);
 
         $this->getJson("/api/public/registrants/{$registrant->registry_number}")
@@ -34,6 +35,7 @@ class RsbsaPublicAccessTest extends TestCase
 
     public function test_rsbsa_preview_reads_the_saved_registration_record(): void
     {
+        $this->withToken(app(JwtService::class)->issue(User::factory()->create(['role' => 'super_admin', 'status' => 'active'])));
         $registrant = $this->registrant(['status' => 'pending']);
 
         $this->getJson("/api/public/registrants/{$registrant->registry_number}/rsbsa-preview")
@@ -44,6 +46,7 @@ class RsbsaPublicAccessTest extends TestCase
 
     public function test_rsbsa_preview_returns_renderable_response_for_missing_record(): void
     {
+        $this->withToken(app(JwtService::class)->issue(User::factory()->create(['role' => 'super_admin', 'status' => 'active'])));
         $this->getJson('/api/public/registrants/071245011000021/rsbsa-preview')
             ->assertOk()
             ->assertJsonPath('found', false)

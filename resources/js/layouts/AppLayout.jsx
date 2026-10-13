@@ -1,11 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Archive, BarChart2, Bell, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, FileText, History, IdCard, LayoutDashboard, LocateFixed, LogOut, Map as MapIcon, MapPin, Megaphone, Menu, Moon, Settings, Shield, Sun, UserCog, UserRound, Users, X } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Archive, BarChart2, Bell, ChevronDown, ChevronLeft, ChevronRight, FileText, History, IdCard, LayoutDashboard, LocateFixed, LogOut, Map as MapIcon, MapPin, Megaphone, Menu, Moon, Settings, Shield, Sun, UserCog, UserRound, Users, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Modal } from '../components/common';
 import { roleTheme } from './RoleThemeLayout';
 import { cx } from '../utils/format';
 import { can, ROLES, sectorAdminRoles } from '../utils/rbac';
+import { api } from '../services/api';
 
 export default function AppLayout() {
     const { user } = useAuth();
@@ -39,14 +41,19 @@ function Header({ theme }) {
     };
 
     const confirmSignOut = () => {
-        setLogoutPromptOpen(false);
-        logout();
-        window.location.assign('/');
+        // Commit the public route and cleared session together so the protected
+        // route cannot redirect to login while a full page reload is pending.
+        flushSync(() => {
+            setLogoutPromptOpen(false);
+            navigate('/#home', { replace: true, state: { instantScroll: true } });
+            logout();
+        });
     };
 
     const primary = [
         { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { to: '/my-profile', label: 'My Profile', icon: IdCard, show: (user) => user?.role === ROLES.FARMER },
+        { to: '/admin/downloadable-files', label: 'Downloadable Files', icon: FileText, show: (user) => [ROLES.FARMER, ROLES.BARANGAY_STAFF].includes(user?.role) },
         { to: '/registration', label: 'Registration', icon: Users },
         { to: '/admin/geo-mapping', label: 'Geo Mapping', icon: LocateFixed, show: (user) => can(user, 'manageGeoMapping') },
         { to: '/map', label: 'Barangay Map', icon: MapIcon, show: (user) => user?.role !== ROLES.SUPER_ADMIN && !sectorAdminRoles.includes(user?.role) },
@@ -60,8 +67,8 @@ function Header({ theme }) {
     const admin = [
         { to: '/admin/registrations', label: user?.role === ROLES.BARANGAY_STAFF ? 'My Barangay Registrants' : 'Registrants', icon: Users, show: (user) => can(user, 'viewBarangayScope') },
         { to: '/admin/barangays', label: user?.role === ROLES.BARANGAY_STAFF ? 'Barangay Schedule' : 'Barangays', icon: MapPin, show: (user) => can(user, 'viewBarangayScope') },
-        { to: '/admin/tracking', label: 'Tracking', icon: ClipboardList, show: (user) => user?.role !== ROLES.SUPER_ADMIN && !sectorAdminRoles.includes(user?.role) && (can(user, 'manageAssistance') || can(user, 'manageInsurance')) },
         { to: '/admin/reports', label: 'Reports', icon: BarChart2, show: (user) => can(user, 'manageReports') },
+        { to: '/admin/downloadable-files', label: 'Downloadable Files', icon: FileText, show: (user) => [ROLES.SUPER_ADMIN, ROLES.MAO_STAFF].includes(user?.role) },
         { to: '/admin/archived/registrants', label: 'Archived Registrants', icon: Archive, group: 'Archived', show: (user) => can(user, 'manageReports') },
         { to: '/admin/archived/assistance', label: 'Archived Assistance Applications', icon: Archive, group: 'Archived', show: (user) => can(user, 'manageReports') },
         { to: '/admin/archived/insurance', label: 'Archived Insurance Applications', icon: Archive, group: 'Archived', show: (user) => can(user, 'manageReports') },
@@ -162,12 +169,14 @@ function TopRightActions({ user, darkMode, onToggleDarkMode }) {
 }
 
 function NotificationButton({ user }) {
+    const { pathname } = useLocation();
     const [open, setOpen] = useState(false);
     const [expanded, setExpanded] = useState(false);
     const [filter, setFilter] = useState('all');
     const [page, setPage] = useState(0);
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [loadError, setLoadError] = useState('');
     const [readIds, setReadIds] = useState(() => readStoredNotificationIds(user));
     const panelRef = useRef(null);
     const target = '/notifications';
@@ -185,7 +194,12 @@ function NotificationButton({ user }) {
 
     useEffect(() => {
         setReadIds(readStoredNotificationIds(user));
-    }, [user?.id]);
+        const syncRead = (event) => {
+            if (event.key === notificationStorageKey(user)) setReadIds(readStoredNotificationIds(user));
+        };
+        window.addEventListener('storage', syncRead);
+        return () => window.removeEventListener('storage', syncRead);
+    }, [user?.id, user?.email]);
 
     useEffect(() => {
         if (!open) {
@@ -210,34 +224,46 @@ function NotificationButton({ user }) {
     }, [open]);
 
     const markRead = (id) => {
-        const next = [...new Set([...readIds, id])];
+        const next = [...new Set([...readStoredNotificationIds(user), ...readIds, id])];
         setReadIds(next);
         storeNotificationIds(user, next);
     };
 
     const markAllRead = () => {
-        const next = items.map((item) => item.id);
+        const next = [...new Set([...readStoredNotificationIds(user), ...readIds, ...items.map((item) => item.id)])];
         setReadIds(next);
         storeNotificationIds(user, next);
     };
 
-    const loadNotifications = useCallback(() => {
+    useEffect(() => {
+        let cancelled = false;
+        setItems([]);
         setLoading(true);
-        setItems(staticNotificationItems());
-        setLoading(false);
-    }, []);
+        setLoadError('');
+        api.get('/notification-deliveries?inbox=1&per_page=50').then((response) => {
+            if (cancelled) return;
+            setItems((response.data.data || []).map((delivery) => ({
+                id: `delivery-${delivery.id}`,
+                title: delivery.announcement?.title || delivery.message || 'Notification',
+                body: delivery.announcement?.body || delivery.provider_response?.body || '',
+                meta: delivery.sent_at ? new Date(delivery.sent_at).toLocaleString() : '',
+                href: '/notifications',
+            })));
+        }).catch(() => {
+            if (!cancelled) setLoadError('Unable to load notifications.');
+        }).finally(() => {
+            if (!cancelled) setLoading(false);
+        });
+        return () => { cancelled = true; };
+    }, [user?.id, pathname]);
 
     useEffect(() => {
-        loadNotifications();
-    }, [loadNotifications]);
-
-    useEffect(() => {
-        if (open && items.length) {
-            const next = items.map((item) => item.id);
+        if ((open || pathname === '/notifications') && items.length) {
+            const next = [...new Set([...readStoredNotificationIds(user), ...items.map((item) => item.id)])];
             setReadIds(next);
             storeNotificationIds(user, next);
         }
-    }, [items, open, user]);
+    }, [items, open, pathname, user]);
 
     return (
         <div ref={panelRef} className="relative">
@@ -286,6 +312,7 @@ function NotificationButton({ user }) {
                     </div>
                     <div className={cx('overflow-y-auto', expanded ? 'max-h-[28rem]' : 'max-h-96')}>
                         {loading && <p className="p-4 text-sm font-semibold text-slate-500">Loading notifications...</p>}
+                        {loadError && <p className="p-4 text-sm text-red-600">{loadError}</p>}
                         {!loading && displayedItems.map((item) => {
                             const unread = !readIds.includes(item.id);
                             const content = (
@@ -323,7 +350,7 @@ function NotificationButton({ user }) {
                                 >{content}</Link>
                             );
                         })}
-                        {!loading && !visibleItems.length && (
+                        {!loading && !loadError && !visibleItems.length && (
                             <p className="p-4 text-center text-sm font-semibold text-slate-500">
                                 {filter === 'unread' ? 'No unread notifications.' : 'No notifications yet.'}
                             </p>
@@ -364,25 +391,6 @@ function NotificationButton({ user }) {
     );
 }
 
-function staticNotificationItems() {
-    return [
-        {
-            id: 'static-livestock-feeds',
-            title: 'Livestock Feeds',
-            body: 'Claim free livestock feeds! Bring your MAO ID for verification.',
-            meta: '8/20/2026, 4:35:08 PM',
-            href: null,
-        },
-        {
-            id: 'static-fishing-gear-assistance',
-            title: 'Fishing Gear Assistance',
-            body: 'Applications for fishing net and fishing gear assistance are now open. Submit your application through the Assistance Module before August 30, 2026.',
-            meta: '8/6/2026, 11:43:13 AM',
-            href: null,
-        },
-    ];
-}
-
 function notificationStorageKey(user) {
     return `tarsis_read_notifications_${user?.id || user?.email || 'user'}`;
 }
@@ -390,14 +398,19 @@ function notificationStorageKey(user) {
 function readStoredNotificationIds(user) {
     try {
         const value = localStorage.getItem(notificationStorageKey(user));
-        return value ? JSON.parse(value) : [];
+        const ids = value ? JSON.parse(value) : [];
+        return Array.isArray(ids) ? ids : [];
     } catch {
         return [];
     }
 }
 
 function storeNotificationIds(user, ids) {
-    localStorage.setItem(notificationStorageKey(user), JSON.stringify(ids));
+    try {
+        localStorage.setItem(notificationStorageKey(user), JSON.stringify(ids));
+    } catch {
+        // Keep the current session usable when browser storage is unavailable.
+    }
 }
 
 function ThemeToggle({ darkMode, onToggle }) {
@@ -431,7 +444,7 @@ function BrandBlock({ compact = false }) {
                 width={compact ? 44 : 52}
                 height={compact ? 44 : 52}
                 className="shrink-0 rounded-full border border-white/20 bg-white object-cover shadow-sm"
-                alt="Office of the Municipal Agriculture Tubigon, Bohol official logo"
+                alt="Office of the Municipal Agriculturist Tubigon, Bohol official logo"
             />
             <span className="min-w-0">
                 <span className={cx('block font-bold leading-tight', compact ? 'text-xl text-white' : 'text-sm text-white')}>TARSIS</span>

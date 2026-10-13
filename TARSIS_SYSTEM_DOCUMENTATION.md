@@ -2,7 +2,7 @@
 
 Version: 1.0  
 System name: TARSIS - Tubigon Agricultural Registry and Services Information System  
-Office: Office of the Municipal Agriculture, Tubigon, Bohol  
+Office: Office of the Municipal Agriculturist, Tubigon, Bohol  
 Prepared for: System users, administrators, developers, evaluators, and maintainers
 
 ## 1. System Overview

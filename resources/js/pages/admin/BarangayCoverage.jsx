@@ -5,7 +5,7 @@ import { ActionGroup, Card, DataTable, Field, Modal, PageHeader, Select, StatCar
 import LeafletMap from '../../components/maps/LeafletMap';
 import { useAuth } from '../../contexts/AuthContext';
 import { api, downloadCsv } from '../../services/api';
-import { formatDate } from '../../utils/format';
+import { dateInputValue } from '../../utils/format';
 import { assignedBarangayIds, can, isBarangayScoped, roleSector, ROLES } from '../../utils/rbac';
 
 const sectorLabels = {
@@ -86,7 +86,7 @@ function AssignmentModal({ row, onClose, onSaved }) {
             setError('');
             setForm({
                 assigned_technical_personnel: row.assigned_technical_personnel || '',
-                enrollment_schedule: formatDate(row.enrollment_schedule) === 'Not set' ? '' : formatDate(row.enrollment_schedule),
+                enrollment_schedule: dateInputValue(row.enrollment_schedule),
                 enrollment_status: row.enrollment_status || 'open',
                 open_time: normalizeTimeValue(row.open_time),
                 close_time: normalizeTimeValue(row.close_time),

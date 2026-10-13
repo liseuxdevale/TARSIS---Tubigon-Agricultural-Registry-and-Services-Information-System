@@ -111,7 +111,7 @@ function ModuleOverview({ totals, asOf, sector }) {
     const sectorLabel = sectorLabels[sector];
 
     return (
-        <Card title={`Module Overview as of ${asOf || new Date().toISOString().slice(0, 10)}`}>
+        <Card title={`Module Overview as of ${formatDate(asOf || new Date().toISOString().slice(0, 10))}`}>
             <div className="grid gap-3 md:grid-cols-3">
                 <DashboardStatCard label={sectorLabel ? `${sectorLabel} Registrants` : 'Registrants'} value={totals.registrants} />
                 <DashboardStatCard label={sectorLabel ? `${sectorLabel} Assistance Applications` : 'Assistance Applications'} value={totals.assistance_applications} tone="blue" />

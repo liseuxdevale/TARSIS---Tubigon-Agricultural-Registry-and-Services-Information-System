@@ -18,8 +18,8 @@ class AccountApprovalTest extends TestCase
             'name' => 'Maria Santos',
             'email' => 'maria@example.test',
             'phone' => '09171234567',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'password123!',
+            'password_confirmation' => 'password123!',
         ])
             ->assertCreated()
             ->assertJsonPath('user.role', 'farmer')

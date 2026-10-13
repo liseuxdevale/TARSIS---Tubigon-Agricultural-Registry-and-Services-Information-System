@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\NotificationDelivery;
 use App\Models\User;
+use App\Rules\StrongPassword;
 use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -242,7 +243,7 @@ class UserManagementController extends Controller
 
     public function resetPassword(Request $request, User $user, AuditLogger $audit)
     {
-        $data = $request->validate(['password' => ['required', 'string', 'min:8']]);
+        $data = $request->validate(['password' => ['required', 'string', 'min:8', new StrongPassword]]);
         $user->update([
             'password' => Hash::make($data['password']),
             'must_change_password' => true,
@@ -276,7 +277,7 @@ class UserManagementController extends Controller
             'email' => [$required, 'email', Rule::unique('users')->ignore($user)],
             'phone' => ['nullable', 'string', 'regex:/^09\d{9}$/', Rule::unique('users')->ignore($user)],
             'office_department' => ['nullable', 'string', 'max:180'],
-            'password' => [$partial ? 'sometimes' : 'required', 'string', 'min:8'],
+            'password' => [$partial ? 'sometimes' : 'required', 'string', 'min:8', new StrongPassword],
             'role' => [$required, Rule::in(self::STAFF_ROLES)],
             'requested_role' => ['nullable', Rule::in(self::STAFF_ROLES)],
             'status' => ['sometimes', 'in:active,inactive,pending,rejected,archived'],

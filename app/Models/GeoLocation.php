@@ -9,6 +9,7 @@ class GeoLocation extends Model
     protected $fillable = [
         'farmer_id',
         'plot_name',
+        'commodity_type',
         'uploaded_by',
         'source_file',
         'point_type',

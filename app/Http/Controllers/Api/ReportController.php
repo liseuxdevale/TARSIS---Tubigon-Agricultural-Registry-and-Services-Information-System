@@ -15,8 +15,28 @@ use Illuminate\Support\Facades\DB;
 
 class ReportController extends Controller
 {
+    private function monthRange(Request $request): array
+    {
+        $request->validate([
+            'month_from' => ['nullable', 'date_format:Y-m'],
+            'month_to' => ['nullable', 'date_format:Y-m', 'after_or_equal:month_from'],
+        ]);
+        if (! $request->filled('month_from') && ! $request->filled('month_to')) return [null, null];
+        $from = \Carbon\Carbon::createFromFormat('!Y-m', $request->input('month_from', $request->input('month_to')))->startOfMonth();
+        $to = \Carbon\Carbon::createFromFormat('!Y-m', $request->input('month_to', $request->input('month_from')))->endOfMonth();
+        abort_if($from->diffInMonths($to) > 120, 422, 'Choose a month range of ten years or less.');
+        return [$from, $to];
+    }
+
     public function dashboard(Request $request)
     {
+        [$monthFrom, $monthTo] = $this->monthRange($request);
+        $request->validate([
+            'assistance_from' => ['nullable', 'date'], 'assistance_to' => ['nullable', 'date', 'after_or_equal:assistance_from'],
+            'insurance_from' => ['nullable', 'date'], 'insurance_to' => ['nullable', 'date', 'after_or_equal:insurance_from'],
+        ]);
+        $request->validate(['barangay_id' => ['nullable', 'integer', 'exists:barangays,id']]);
+        $barangayId = $request->integer('barangay_id');
         $hasBarangayScope = $request->user()?->role === 'barangay_technical_staff';
         $barangayIds = $hasBarangayScope ? $request->user()->assignedBarangayIds() : [];
         $sector = $this->reportSector($request);
@@ -25,14 +45,20 @@ class ReportController extends Controller
         $weekFromNow = now()->addWeek()->endOfDay();
 
         $registrants = Registrant::query()
+            ->when($monthFrom, fn ($query) => $query->whereBetween('created_at', [$monthFrom, $monthTo]))
+            ->when($barangayId, fn ($query) => $query->where('barangay_id', $barangayId))
             ->when($hasBarangayScope, fn ($query) => $query->whereIn('barangay_id', $barangayIds))
             ->when($sector, fn ($query) => $query->where('sector', $sector));
         $assistance = AssistanceApplication::query()
+            ->when($monthFrom, fn ($query) => $query->whereBetween('applied_at', [$monthFrom->toDateString(), $monthTo->toDateString()]))
+            ->when($barangayId, fn ($query) => $query->whereHas('registrant', fn ($registrant) => $registrant->where('barangay_id', $barangayId)))
             ->when($hasBarangayScope || $sector, fn ($query) => $query->whereHas('registrant', function ($registrant) use ($hasBarangayScope, $barangayIds, $sector) {
                 $registrant->when($hasBarangayScope, fn ($query) => $query->whereIn('barangay_id', $barangayIds))
                     ->when($sector, fn ($query) => $query->where('sector', $sector));
             }));
         $insurance = InsuranceClaim::query()
+            ->when($monthFrom, fn ($query) => $query->whereBetween('created_at', [$monthFrom, $monthTo]))
+            ->when($barangayId, fn ($query) => $query->whereHas('registrant', fn ($registrant) => $registrant->where('barangay_id', $barangayId)))
             ->when($hasBarangayScope || $sector, fn ($query) => $query->whereHas('registrant', function ($registrant) use ($hasBarangayScope, $barangayIds, $sector) {
                 $registrant->when($hasBarangayScope, fn ($query) => $query->whereIn('barangay_id', $barangayIds))
                     ->when($sector, fn ($query) => $query->where('sector', $sector));
@@ -41,12 +67,12 @@ class ReportController extends Controller
         return response()->json([
             'as_of' => now()->toDateString(),
             'scope_sector' => $sector,
-            'monthly_registrants' => collect(range(1, 12))->map(function (int $month) use ($registrants) {
-                $start = now()->setMonth($month)->startOfMonth();
+            'monthly_registrants' => collect(\Carbon\CarbonPeriod::create($monthFrom ?? now()->startOfYear(), '1 month', $monthTo ?? now()->endOfYear()))->map(function ($month) use ($registrants) {
+                $start = $month->copy()->startOfMonth();
                 $end = (clone $start)->endOfMonth();
 
                 return [
-                    'month' => $start->format('M'),
+                    'month' => $start->format('M Y'),
                     'total' => (clone $registrants)->whereBetween('created_at', [$start, $end])->count(),
                 ];
             }),
@@ -64,7 +90,9 @@ class ReportController extends Controller
                 'archived_insurance_applications' => (clone $insurance)->whereNotNull('archived_at')->count(),
             ],
             'by_sector' => (clone $registrants)->select('sector', DB::raw('count(*) as total'))->groupBy('sector')->get(),
-            'by_barangay' => Barangay::withCount(['registrants' => fn ($query) => $query->when($sector, fn ($query) => $query->where('sector', $sector))])
+            'by_barangay' => Barangay::withCount(['registrants' => fn ($query) => $query->when($sector, fn ($query) => $query->where('sector', $sector))
+                ->when($monthFrom, fn ($query) => $query->whereBetween('created_at', [$monthFrom, $monthTo]))])
+                ->when($barangayId, fn ($query) => $query->where('id', $barangayId))
                 ->when($hasBarangayScope, fn ($query) => $query->whereIn('id', $barangayIds))
                 ->orderByDesc('registrants_count')
                 ->orderBy('name')
@@ -102,11 +130,12 @@ class ReportController extends Controller
                 ->latest()
                 ->limit(5)
                 ->get(['id', 'user_id', 'action', 'created_at']),
-            'assistance_report' => $request->user()?->role === 'super_admin' ? AssistanceApplication::query()
+            'assistance_report' => in_array($request->user()?->role, ['super_admin', 'mao_staff'], true) ? (clone $assistance)
+                ->when($request->assistance_from, fn ($query, $date) => $query->whereDate('applied_at', '>=', $date))
+                ->when($request->assistance_to, fn ($query, $date) => $query->whereDate('applied_at', '<=', $date))
                 ->with('registrant:id,registry_number,first_name,middle_name,last_name,suffix,sector')
                 ->whereNull('archived_at')
                 ->latest('applied_at')
-                ->limit(100)
                 ->get(['id', 'registrant_id', 'assistance_type', 'applied_at', 'status'])
                 ->map(fn (AssistanceApplication $application) => [
                     'id' => $application->id,
@@ -116,6 +145,21 @@ class ReportController extends Controller
                     'registry_number' => $application->registrant?->registry_number,
                     'application_date' => $application->applied_at?->toDateString(),
                     'status' => $application->status,
+                ]) : collect(),
+            'insurance_report' => in_array($request->user()?->role, ['super_admin', 'mao_staff'], true) ? (clone $insurance)
+                ->when($request->insurance_from, fn ($query, $date) => $query->whereDate('created_at', '>=', $date))
+                ->when($request->insurance_to, fn ($query, $date) => $query->whereDate('created_at', '<=', $date))
+                ->with('registrant:id,registry_number,first_name,middle_name,last_name,suffix,sector')
+                ->whereNull('archived_at')->latest()->get()
+                ->map(fn (InsuranceClaim $claim) => [
+                    'id' => $claim->id,
+                    'sector' => $claim->registrant?->sector,
+                    'applicant' => $claim->registrant?->full_name,
+                    'registry_number' => $claim->registrant?->registry_number,
+                    'insurance_type' => $claim->claim_type,
+                    'application_date' => $claim->created_at?->toDateString(),
+                    'approval_status' => $claim->approval_status,
+                    'release_status' => $claim->release_status,
                 ]) : collect(),
             'seasonal_production' => (clone $registrants)->select('sector', DB::raw('count(*) as beneficiaries'))->groupBy('sector')->get(),
         ]);
@@ -160,9 +204,43 @@ class ReportController extends Controller
 
     public function export(Request $request)
     {
+        [$monthFrom, $monthTo] = $this->monthRange($request);
+        $request->validate(['barangay_id' => ['nullable', 'integer', 'exists:barangays,id']]);
         $sector = $this->reportSector($request);
         $dataset = $request->string('dataset', 'registrants')->toString();
         $format = $request->string('format', 'csv')->toString();
+        if (in_array($dataset, ['assistance', 'insurance'], true)) {
+            abort_unless($request->user()?->hasRole(['super_admin', 'mao_staff']), 403);
+            $request->validate(['date_from' => ['nullable', 'date'], 'date_to' => ['nullable', 'date', 'after_or_equal:date_from'], 'assistance_type' => ['nullable', 'string'], 'insurance_type' => ['nullable', 'string', 'max:255']]);
+            $isAssistance = $dataset === 'assistance';
+            $dateColumn = $isAssistance ? 'applied_at' : 'created_at';
+            $query = ($isAssistance ? AssistanceApplication::query() : InsuranceClaim::query())
+                ->when(! $isAssistance && $request->insurance_type, fn ($query) => $query->where('claim_type', $request->insurance_type))
+                ->when($monthFrom, fn ($query) => $query->whereBetween($dateColumn, $isAssistance ? [$monthFrom->toDateString(), $monthTo->toDateString()] : [$monthFrom, $monthTo]))
+                ->with('registrant')->whereNull('archived_at')
+                ->when($sector || $request->integer('barangay_id'), fn ($query) => $query->whereHas('registrant', fn ($person) => $person
+                    ->when($sector, fn ($query) => $query->where('sector', $sector))
+                    ->when($request->integer('barangay_id'), fn ($query, $id) => $query->where('barangay_id', $id))))
+                ->when($request->date_from, fn ($query, $date) => $query->whereDate($dateColumn, '>=', $date))
+                ->when($request->date_to, fn ($query, $date) => $query->whereDate($dateColumn, '<=', $date))
+                ->orderByDesc($dateColumn);
+            $csv = $this->csvRow($isAssistance
+                ? ['assistance_type', 'sector', 'applicant', 'registry_number', 'application_date', 'status']
+                : ['insurance_type', 'sector', 'applicant', 'registry_number', 'application_date', 'approval_status', 'release_status']);
+            foreach ($query->cursor() as $row) {
+                $type = $isAssistance ? $row->assistance_type : $row->claim_type;
+                if ($isAssistance && $request->assistance_type) {
+                    $normalized = in_array(strtolower($type), ['farm', 'farm input', 'rice seeds', 'rice_seeds']) ? 'fisheries' : ($type === 'crop_damage' ? 'crop' : $type);
+                    if ($normalized !== $request->assistance_type) continue;
+                }
+                $values = [$type, $row->registrant?->sector, $row->registrant?->full_name,
+                    $row->registrant?->registry_number, $row->{$dateColumn}?->toDateString()];
+                $values = array_merge($values, $isAssistance ? [$row->status] : [$row->approval_status, $row->release_status]);
+                $values = array_map(fn ($value) => preg_match('/^[\s]*[=+@-]/u', (string) $value) ? "'".$value : $value, $values);
+                $csv .= $this->csvRow($values);
+            }
+            return $this->download($csv, 'tarsis-'.$dataset.'-tracker', 'csv');
+        }
 
         if ($dataset === 'archived_registrants') {
             return $this->exportArchivedRegistrants($sector, $format);
@@ -175,6 +253,9 @@ class ReportController extends Controller
         }
 
         $rows = Registrant::with(['barangay', 'assistanceApplications', 'insuranceClaims'])
+            ->when($monthFrom, fn ($query) => $query->whereBetween('created_at', [$monthFrom, $monthTo]))
+            ->when($request->integer('barangay_id'), fn ($query, $barangayId) => $query->where('barangay_id', $barangayId))
+            ->when($request->user()?->role === 'barangay_technical_staff', fn ($query) => $query->whereIn('barangay_id', $request->user()->assignedBarangayIds()))
             ->when($sector, fn ($query) => $query->where('sector', $sector))
             ->orderBy('registry_number')
             ->get();

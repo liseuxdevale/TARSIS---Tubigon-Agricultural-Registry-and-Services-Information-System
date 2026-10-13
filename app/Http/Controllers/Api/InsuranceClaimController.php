@@ -30,6 +30,8 @@ class InsuranceClaimController extends Controller
     public function store(Request $request, AuditLogger $audit)
     {
         $data = $this->validated($request);
+        $data['evidence_path'] = $request->file('photo')->store('insurance-evidence', 'public');
+        unset($data['photo']);
         $data['encoded_by'] = $request->user()->id;
         $claim = InsuranceClaim::create($data)->load('registrant.barangay');
         $audit->log($request, 'insurance.created', $claim);
@@ -46,6 +48,10 @@ class InsuranceClaimController extends Controller
     {
         $old = $insuranceClaim->toArray();
         $data = $this->validated($request, true);
+        if ($request->hasFile('photo')) {
+            $data['evidence_path'] = $request->file('photo')->store('insurance-evidence', 'public');
+        }
+        unset($data['photo']);
 
         if (($data['release_status'] ?? null) !== null && $data['release_status'] !== 'released') {
             $data['archived_at'] = null;
@@ -79,6 +85,7 @@ class InsuranceClaimController extends Controller
         $required = $partial ? 'sometimes' : 'required';
 
         return $request->validate([
+            'photo' => [$partial ? 'sometimes' : 'required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'registrant_id' => [$required, 'exists:registrants,id'],
             'claim_type' => [$required, 'string', 'max:120'],
             'policy_number' => ['nullable', 'string', 'max:120'],

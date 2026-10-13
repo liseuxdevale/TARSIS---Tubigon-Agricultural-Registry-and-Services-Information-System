@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { api } from '../../services/api';
+import { isStrongPassword, passwordHelp } from '../../utils/passwordPolicy';
 import { useAuth } from '../../contexts/AuthContext';
 import { Alert, AuthShell, FieldError, Spinner, authButtonClass, fieldClass } from './SignIn';
 
@@ -28,7 +29,7 @@ export default function ForcePasswordChange() {
         const next = {};
         if (!form.current_password) next.current_password = 'Current password is required.';
         if (!form.password) next.password = 'New password is required.';
-        else if (form.password.length < 8) next.password = 'Use at least 8 characters.';
+        else if (!isStrongPassword(form.password)) next.password = passwordHelp;
         if (form.password !== form.password_confirmation) next.password_confirmation = 'Passwords do not match.';
         setErrors(next);
         return !Object.keys(next).length;
@@ -63,6 +64,7 @@ export default function ForcePasswordChange() {
                     </div>
 
                     <form onSubmit={submit} className="space-y-3" noValidate>
+                        <p className="text-xs text-gray-500">{passwordHelp}</p>
                         {serverError && <Alert tone="error">{serverError}</Alert>}
                         <PasswordField
                             label="Current password"

@@ -9,7 +9,12 @@ export default function Hero({ announcements = [] }) {
     const touchStartRef = useRef(null);
     const suppressClickRef = useRef(false);
     const heroRef = useRef(null);
-    const active = announcements[activeIndex] || announcements[0];
+    const active = announcements[activeIndex] || announcements[0] || {
+        title: 'Welcome to TARSIS',
+        tag: 'Tubigon Agriculture and Fisheries',
+        excerpt: 'Registration and services for farmers and fisherfolk in Tubigon, Bohol.',
+        date: '',
+    };
     const announcementHref = active?.href || '/announcements';
     const isAnnouncementSlide = ['Advisory', 'Announcement'].includes(active?.tag);
     const statusHref = announcementStatusLink(active?.type);
@@ -91,8 +96,6 @@ export default function Hero({ announcements = [] }) {
         suppressClickRef.current = false;
     };
 
-    if (!active) return null;
-
     return (
         <section
             ref={heroRef}
@@ -101,13 +104,13 @@ export default function Hero({ announcements = [] }) {
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
         >
-            <img
+            {active.img && <img
                 src={active.img}
                 alt=""
                 className="absolute inset-x-0 -top-20 h-[calc(100%+10rem)] w-full object-cover opacity-30 transition-opacity duration-500 will-change-transform"
                 style={{ transform: `translate3d(0, ${parallaxOffset}px, 0) scale(1.08)` }}
                 aria-hidden="true"
-            />
+            />}
             <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(26,71,49,0.94)_0%,rgba(26,71,49,0.76)_58%,rgba(26,71,49,0.44)_100%)]" />
             <Link
                 to={announcementHref}
@@ -125,7 +128,7 @@ export default function Hero({ announcements = [] }) {
                         {active.title}
                     </h1>
                     <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-white/60">
-                        {active.tag} / {active.date}
+                        {active.tag}{active.date ? ` / ${active.date}` : ''}
                     </p>
                     <p className="mb-8 text-base leading-relaxed text-white/80 sm:text-lg">
                         {active.excerpt}

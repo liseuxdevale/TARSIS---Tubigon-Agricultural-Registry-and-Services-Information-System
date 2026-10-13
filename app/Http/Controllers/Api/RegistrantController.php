@@ -6,10 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Registrant;
 use App\Services\AuditLogger;
 use App\Services\QrCodeService;
+use App\Services\RegistrantDuplicateService;
 use App\Services\RegistryNumberService;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class RegistrantController extends Controller
 {
@@ -20,6 +23,7 @@ class RegistrantController extends Controller
             : [];
 
         $query = Registrant::query()
+            ->when(! $this->isStaffUser($request), fn ($query) => $query->whereNotNull('email')->whereRaw('LOWER(email) = ?', [strtolower($request->user()?->email ?? '')]))
             ->with('barangay')
             ->withCount(['assistanceApplications', 'insuranceClaims'])
             ->when($request->user()?->role === 'barangay_technical_staff', fn ($query) => $query->whereIn('barangay_id', $barangayIds))
@@ -82,7 +86,7 @@ class RegistrantController extends Controller
         return response()->json(['data' => $query->get()]);
     }
 
-    public function store(Request $request, RegistryNumberService $registry, AuditLogger $audit)
+    public function store(Request $request, RegistryNumberService $registry, AuditLogger $audit, RegistrantDuplicateService $duplicates)
     {
         $this->normalizeStructuredPayloads($request);
         $data = $this->validated($request);
@@ -94,59 +98,62 @@ class RegistrantController extends Controller
             );
         }
         $referenceId = $data['rsbsa_payload']['reference_id'] ?? null;
-        if ($request->user() && ($data['rsbsa_payload']['enrollment_type'] ?? null) === 'Updating' && $referenceId) {
-            $registrant = Registrant::query()
-                ->where('registry_number', $referenceId)
-                ->first();
-
-            if ($registrant) {
-                $this->authorizeBarangayScope($request, $registrant);
-                $old = $registrant->toArray();
+        if (! empty($data['registry_number']) && $referenceId && $data['registry_number'] !== $referenceId) {
+            throw ValidationException::withMessages(['registry_number' => 'The RSBSA number and reference number must match.']);
+        }
+        if (($data['rsbsa_payload']['enrollment_type'] ?? null) === 'Updating' && $referenceId) {
+            $existing = $duplicates->exact($referenceId);
+            if ($existing && ! $existing->trashed()) {
+                return $this->update($request, $existing, $audit, $duplicates);
+            }
+        }
+        $data['registry_number'] = $data['registry_number'] ?? $referenceId;
+        if (! $this->isStaffUser($request)) {
+            unset($data['status']);
+        }
+        try {
+            return DB::transaction(function () use ($request, $data, $registry, $audit, $duplicates) {
+                // Serialize local reference allocation per barangay; the existing unique index is the final guard.
+                DB::table('barangays')->where('id', $data['barangay_id'])->lockForUpdate()->first();
+                if ($warning = $duplicates->check($request, $data)) {
+                    return response()->json($warning, $warning['code'] === 'possible_duplicate' ? 409 : 422);
+                }
+                $data['registry_number'] = $data['registry_number'] ?: $registry->next((int) $data['barangay_id']);
+                $data['status'] = $data['status'] ?? 'pending';
                 if ($request->hasFile('photo')) {
                     $data['photo_path'] = $request->file('photo')->store('registrant-photos', 'public');
                 }
-                unset($data['photo'], $data['registry_number']);
+                unset($data['photo'], $data['duplicate_review_token']);
+                $registrant = Registrant::create($data)->load('barangay');
+                $audit->log($request, 'registrant.created', $registrant, [], $registrant->toArray());
 
-                $registrant->update($data);
-                $audit->log($request, 'registrant.updated', $registrant, $old, $registrant->fresh()->toArray());
-
-                return response()->json($registrant->fresh()->load('barangay'));
+                return response()->json($registrant, 201);
+            }, 3);
+        } catch (QueryException $error) {
+            if (str_contains(strtolower($error->getMessage()), 'registry_number') && in_array($error->errorInfo[0] ?? null, ['23000', '23505'])) {
+                throw ValidationException::withMessages(['registry_number' => RegistrantDuplicateService::NUMBER_MESSAGE]);
             }
+            throw $error;
         }
-        $data['registry_number'] = $registry->next((int) $data['barangay_id']);
-        $data['status'] = $data['status'] ?? 'pending';
-        if ($request->hasFile('photo')) {
-            $data['photo_path'] = $request->file('photo')->store('registrant-photos', 'public');
-        } elseif (($data['rsbsa_payload']['enrollment_type'] ?? null) === 'Updating') {
-            $referenceRegistrant = Registrant::query()
-                ->where('registry_number', $data['rsbsa_payload']['reference_id'] ?? null)
-                ->first();
-
-            if ($referenceRegistrant?->photo_path) {
-                $data['photo_path'] = $referenceRegistrant->photo_path;
-            }
-        }
-        unset($data['photo']);
-
-        $registrant = Registrant::create($data)->load('barangay');
-        $audit->log($request, 'registrant.created', $registrant, [], $registrant->toArray());
-
-        return response()->json($registrant, 201);
     }
 
     public function show(Request $request, Registrant $registrant)
     {
+        abort_unless($this->isStaffUser($request) || $this->ownsRegistrantRecord($request, $registrant), 403, 'Forbidden.');
         $this->authorizeBarangayScope($request, $registrant);
 
         return response()->json($registrant->load(['barangay', 'assistanceApplications', 'insuranceClaims']));
     }
 
-    public function publicProfile(string $registryNumber)
+    public function publicProfile(Request $request, string $registryNumber)
     {
         $registrant = Registrant::with(['barangay', 'assistanceApplications', 'insuranceClaims'])
             ->where('registry_number', $registryNumber)
             ->where('status', 'approved')
             ->firstOrFail();
+
+        abort_unless($this->isStaffUser($request) || $this->ownsRegistrantRecord($request, $registrant), 403, 'Forbidden.');
+        $this->authorizeBarangayScope($request, $registrant);
 
         return response()->json($registrant);
     }
@@ -187,7 +194,7 @@ class RegistrantController extends Controller
         return response()->json(['registrant' => $registrant]);
     }
 
-    public function rsbsaPreview(string $registryNumber, QrCodeService $qr)
+    public function rsbsaPreview(Request $request, string $registryNumber, QrCodeService $qr)
     {
         $registrant = Registrant::with('barangay')
             ->where('registry_number', $registryNumber)
@@ -201,6 +208,8 @@ class RegistrantController extends Controller
             ]);
         }
 
+        abort_unless($this->isStaffUser($request) || $this->ownsRegistrantRecord($request, $registrant), 403, 'Forbidden.');
+        $this->authorizeBarangayScope($request, $registrant);
         $payload = url("/profile/{$registrant->registry_number}");
         $registrant->setAttribute('qr_payload', $payload);
         $registrant->setAttribute('qr_image_url', 'https://api.qrserver.com/v1/create-qr-code/?size=900x900&qzone=0&data='.urlencode($payload));
@@ -210,18 +219,21 @@ class RegistrantController extends Controller
         return response()->json($registrant);
     }
 
-    public function update(Request $request, Registrant $registrant, AuditLogger $audit)
+    public function update(Request $request, Registrant $registrant, AuditLogger $audit, RegistrantDuplicateService $duplicates)
     {
         $this->authorizeBarangayScope($request, $registrant);
         abort_unless(
-            $this->isStaffUser($request) || $this->ownsRegistrantRecord($request, $registrant),
+            $this->isStaffUser($request),
             403,
-            'This registry record is not linked to your account email.',
+            'Only authorized staff can edit registration details.',
         );
 
         $old = $registrant->toArray();
         $this->normalizeStructuredPayloads($request);
         $data = $this->validated($request, partial: true);
+        if (! $this->isStaffUser($request)) {
+            unset($data['status']);
+        }
         if ($request->user()?->role === 'barangay_technical_staff') {
             unset($data['status']);
             $targetBarangayId = (int) ($data['barangay_id'] ?? $registrant->barangay_id);
@@ -231,23 +243,49 @@ class RegistrantController extends Controller
                 'This barangay is not assigned to your account.',
             );
         }
-        if ($request->hasFile('photo')) {
-            $data['photo_path'] = $request->file('photo')->store('registrant-photos', 'public');
-        }
-        unset($data['photo']);
-        $registrant->update($data);
-        $audit->log($request, 'registrant.updated', $registrant, $old, $registrant->fresh()->toArray());
+        try {
+            return DB::transaction(function () use ($request, $registrant, $data, $duplicates, $audit, $old) {
+                $registrant = Registrant::whereKey($registrant->id)->lockForUpdate()->firstOrFail();
+                $candidate = array_merge($registrant->getAttributes(), $data);
+                if ($warning = $duplicates->check($request, $candidate, $registrant)) {
+                    return response()->json($warning, $warning['code'] === 'possible_duplicate' ? 409 : 422);
+                }
+                if ($request->hasFile('photo')) {
+                    $data['photo_path'] = $request->file('photo')->store('registrant-photos', 'public');
+                }
+                // A missing optional number must not erase an existing reference.
+                if (empty($data['registry_number'])) {
+                    unset($data['registry_number']);
+                }
+                unset($data['photo'], $data['duplicate_review_token']);
+                $registrant->update($data);
+                $audit->log($request, 'registrant.updated', $registrant, $old, $registrant->fresh()->toArray());
 
-        return response()->json($registrant->fresh()->load('barangay'));
+                return response()->json($registrant->fresh()->load('barangay'));
+            }, 3);
+        } catch (QueryException $error) {
+            if (str_contains(strtolower($error->getMessage()), 'registry_number') && in_array($error->errorInfo[0] ?? null, ['23000', '23505'])) {
+                throw ValidationException::withMessages(['registry_number' => RegistrantDuplicateService::NUMBER_MESSAGE]);
+            }
+            throw $error;
+        }
     }
 
     private function normalizeStructuredPayloads(Request $request): void
     {
+        if ($request->exists('registry_number') && (is_string($request->input('registry_number')) || $request->input('registry_number') === null)) {
+            $request->merge(['registry_number' => RegistrantDuplicateService::number($request->input('registry_number'))]);
+        }
         if (is_string($request->input('rsbsa_payload'))) {
             $request->merge(['rsbsa_payload' => json_decode($request->input('rsbsa_payload'), true)]);
         }
         if (is_array($request->input('rsbsa_payload'))) {
             $request->merge(['rsbsa_payload' => $this->sanitizeRsbsaPayload($request->input('rsbsa_payload'))]);
+            $payload = $request->input('rsbsa_payload');
+            if (isset($payload['reference_id']) && is_string($payload['reference_id'])) {
+                $payload['reference_id'] = RegistrantDuplicateService::number($payload['reference_id']);
+            }
+            $request->merge(['rsbsa_payload' => $payload]);
         }
         if (is_string($request->input('expected_production'))) {
             $request->merge(['expected_production' => json_decode($request->input('expected_production'), true)]);
@@ -295,28 +333,52 @@ class RegistrantController extends Controller
         return response()->json($registrant->fresh());
     }
 
-    public function duplicates(Request $request)
+    public function duplicates(Request $request, RegistrantDuplicateService $duplicates)
     {
         $sector = $this->sectorForRole($request->user()?->role);
-        $dupeKeys = Registrant::query()
+        $records = Registrant::with('barangay:id,name')
             ->when($sector, fn ($query) => $query->where('sector', $sector))
-            ->select('first_name', 'last_name', 'birthday', DB::raw('count(*) as total'))
-            ->groupBy('first_name', 'last_name', 'birthday')
-            ->having('total', '>', 1)
             ->get();
+        $groups = $records->filter(fn ($record) => $record->birthday && RegistrantDuplicateService::name($record->getAttributes()) !== '')
+            ->groupBy(fn ($record) => RegistrantDuplicateService::name($record->getAttributes()).'|'.$record->birthday->toDateString())
+            ->filter(fn ($group) => $group->count() > 1)
+            ->map(function ($group) use ($duplicates) {
+                $pairs = $duplicates->unresolvedPairs($group);
+                $ids = collect($pairs)->flatten()->unique();
+                $group = $group->filter(fn ($record) => $ids->contains($record->id));
+                if ($group->isEmpty()) return null;
+                return [
+                'match' => $group->first()->full_name,
+                'birthday' => $group->first()->birthday->toDateString(),
+                'label' => 'Possible Duplicate', 'total' => $group->count(),
+                'records' => $group->map(fn ($record) => $duplicates->summary($record))->values(),
+                'pairs' => $pairs,
+            ];
+            })->filter()->values();
 
-        $records = $dupeKeys->map(fn ($key) => [
-            'match' => "{$key->first_name} {$key->last_name} / {$key->birthday}",
-            'total' => $key->total,
-            'records' => Registrant::with('barangay')
-                ->where('first_name', $key->first_name)
-                ->where('last_name', $key->last_name)
-                ->whereDate('birthday', $key->birthday)
-                ->when($sector, fn ($query) => $query->where('sector', $sector))
-                ->get(),
-        ])->values();
+        return response()->json($groups);
+    }
 
-        return response()->json($records);
+    public function markDifferentPersons(Request $request, RegistrantDuplicateService $duplicates, AuditLogger $audit)
+    {
+        $data = $request->validate([
+            'first_id' => ['required', 'integer', 'different:second_id'],
+            'second_id' => ['required', 'integer'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+        abort_if(trim($data['reason']) === '', 422, 'A review reason is required.');
+        $first = Registrant::findOrFail($data['first_id']);
+        $second = Registrant::findOrFail($data['second_id']);
+        abort_unless($duplicates::canInspect($request->user(), $first) && $duplicates::canInspect($request->user(), $second), 403);
+        abort_unless($first->birthday && $second->birthday
+            && $first->birthday->toDateString() === $second->birthday->toDateString()
+            && $duplicates::name($first->getAttributes()) === $duplicates::name($second->getAttributes()), 422, 'These records no longer match. Refresh the duplicate list.');
+        $audit->log($request, 'registrant.different_persons', $first, [], [
+            'first_id' => $first->id, 'second_id' => $second->id,
+            'pair_key' => $duplicates->pairKey($first, $second), 'reason' => trim($data['reason']),
+        ]);
+
+        return response()->json(['message' => 'Reviewed as different persons. Both records remain active.']);
     }
 
     public function digitalId(Registrant $registrant, QrCodeService $qr)
@@ -349,9 +411,15 @@ class RegistrantController extends Controller
     {
         $required = $partial ? 'sometimes' : 'required';
         $rsbsaRequired = $partial ? 'sometimes' : 'required';
+        $activityRules = function (string $livelihood) use ($request) {
+            $selected = in_array($livelihood, (array) $request->input('rsbsa_payload.main_livelihood', []), true);
+            return $selected ? ['required', 'array', 'min:1'] : ['nullable', 'array'];
+        };
         $photoRequired = (! $partial && $request->input('rsbsa_payload.enrollment_type') !== 'Updating') ? 'required' : 'sometimes';
 
         return $request->validate([
+            'registry_number' => ['nullable', 'string', 'regex:/^\d{15}$/D'],
+            'duplicate_review_token' => ['nullable', 'string', 'max:5000'],
             'sector' => [$required, Rule::in(['farmer', 'fisherfolk', 'livestock', 'poultry'])],
             'status' => ['sometimes', Rule::in(['pending', 'approved', 'archived', 'deactivated'])],
             'first_name' => [$required, 'string', 'max:120'],
@@ -375,6 +443,7 @@ class RegistrantController extends Controller
             'expected_production' => ['nullable', 'array'],
             'rsbsa_payload' => ['nullable', 'array'],
             'rsbsa_payload.enrollment_type' => [$rsbsaRequired, Rule::in(['New', 'Updating'])],
+            'rsbsa_payload.reference_id' => ['nullable', 'string', 'regex:/^\d{15}$/D'],
             'rsbsa_payload.date_administered' => [$rsbsaRequired, 'date'],
             'rsbsa_payload.address_line' => [$rsbsaRequired, 'string', 'max:255'],
             'rsbsa_payload.street' => ['nullable', 'string', 'max:255'],
@@ -415,13 +484,13 @@ class RegistrantController extends Controller
                 }
             }],
             'rsbsa_payload.main_livelihood.*' => [Rule::in(['Farmer', 'Farmworker/Laborer', 'Fisherfolk', 'Agri Youth'])],
-            'rsbsa_payload.farmer_activities' => ['nullable', 'array'],
+            'rsbsa_payload.farmer_activities' => $activityRules('Farmer'),
             'rsbsa_payload.farmer_activities.*' => ['string'],
-            'rsbsa_payload.farmworker_activities' => ['nullable', 'array'],
+            'rsbsa_payload.farmworker_activities' => $activityRules('Farmworker/Laborer'),
             'rsbsa_payload.farmworker_activities.*' => ['string'],
-            'rsbsa_payload.fishing_activities' => ['nullable', 'array'],
+            'rsbsa_payload.fishing_activities' => $activityRules('Fisherfolk'),
             'rsbsa_payload.fishing_activities.*' => ['string'],
-            'rsbsa_payload.youth_activities' => ['nullable', 'array'],
+            'rsbsa_payload.youth_activities' => $activityRules('Agri Youth'),
             'rsbsa_payload.youth_activities.*' => ['string'],
             'rsbsa_payload.farmer_other' => ['nullable', 'string', 'max:255'],
             'rsbsa_payload.farmer_livestock' => ['nullable', 'string', 'max:255'],

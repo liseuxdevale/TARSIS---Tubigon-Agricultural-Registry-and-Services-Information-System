@@ -33,7 +33,6 @@ class AssistanceApplicationController extends Controller
     public function store(Request $request, AuditLogger $audit)
     {
         $data = $this->validated($request);
-        $data['evidence_path'] = $request->file('photo')->store('assistance-evidence', 'public');
         $data['encoded_by'] = $request->user()->id;
         $application = AssistanceApplication::create($data)->load('registrant.barangay');
         $audit->log($request, 'assistance.created', $application);
@@ -50,10 +49,6 @@ class AssistanceApplicationController extends Controller
     {
         $old = $assistanceApplication->toArray();
         $data = $this->validated($request, true);
-        if ($assistanceApplication->evidence_path) {
-            Storage::disk('public')->delete($assistanceApplication->evidence_path);
-        }
-        $data['evidence_path'] = $request->file('photo')->store('assistance-evidence', 'public');
         $assistanceApplication->update($data);
         $audit->log($request, 'assistance.updated', $assistanceApplication, $old, $assistanceApplication->fresh()->toArray());
 
@@ -81,7 +76,6 @@ class AssistanceApplicationController extends Controller
             'assistance_type' => [$required, 'string', 'max:120'],
             'program_name' => [$required, 'string', 'max:180'],
             'description' => ['nullable', 'string'],
-            'photo' => ['required', 'image', 'max:5120'],
             'status' => ['sometimes', 'in:pending,application_submitted,received_by_mao,forwarded_to_mswdo,under_review,approved,rejected,released'],
             'applied_at' => [$required, 'date'],
             'approved_at' => ['nullable', 'date'],

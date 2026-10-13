@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Rules\StrongPassword;
 use App\Services\AuditLogger;
 use App\Services\JwtService;
 use Illuminate\Http\Request;
@@ -24,7 +25,7 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', Rule::unique('users')],
             'phone' => ['required', 'string', 'regex:/^09\d{9}$/', Rule::unique('users')],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'string', 'min:8', new StrongPassword, 'confirmed'],
         ], [
             'phone.required' => 'Mobile number is required.',
             'phone.regex' => 'Enter a valid 11-digit mobile number starting with 09.',
@@ -166,7 +167,7 @@ class AuthController extends Controller
     {
         $data = $request->validate([
             'current_password' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'string', 'min:8', new StrongPassword, 'confirmed'],
         ]);
 
         $user = $request->user();

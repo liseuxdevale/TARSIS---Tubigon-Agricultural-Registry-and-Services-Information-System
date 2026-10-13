@@ -4,6 +4,7 @@ import { Card, Field, InfoRow, Modal, PageHeader, PageLoader, StatusBadge } from
 import { roles } from '../../constants/options';
 import { api } from '../../services/api';
 import { formatDate } from '../../utils/format';
+import { isStrongPassword, passwordHelp } from '../../utils/passwordPolicy';
 
 const roleLabels = {
     super_admin: 'Super Administrator',
@@ -240,6 +241,7 @@ function UserFormModal({ modal, barangays, onClose, onSaved }) {
     async function submit(event) {
         event.preventDefault();
         setError('');
+        if (!editing && !isStrongPassword(form.password)) return setError(passwordHelp);
         if (!editing && form.password !== form.password_confirmation) return setError('Password confirmation does not match.');
         const payload = {
             name: [form.first_name, form.middle_name, form.last_name].filter(Boolean).join(' '),
@@ -337,7 +339,8 @@ function UserProfileInfoRow({ label, value }) {
 
 function ResetModal({ user, onClose, onConfirm }) {
     const [password, setPassword] = useState('');
-    return <Modal open title="Reset Password" onClose={onClose}><form className="space-y-3" onSubmit={(event) => { event.preventDefault(); onConfirm(password); }}><p className="text-sm text-gray-600">Reset password for <strong>{user.name}</strong>. The user must replace this temporary password on their next login.</p><Field label="Temporary Password"><input required minLength={8} type="password" className="field" value={password} onChange={(event) => setPassword(event.target.value)} /></Field><div className="flex justify-end gap-2"><button className="btn-secondary" type="button" onClick={onClose}>Cancel</button><button className="btn-primary" type="submit">Reset Password</button></div></form></Modal>;
+    const [error, setError] = useState('');
+    return <Modal open title="Reset Password" onClose={onClose}><form className="space-y-3" onSubmit={(event) => { event.preventDefault(); if (!isStrongPassword(password)) return setError(passwordHelp); onConfirm(password); }}><p className="text-sm text-gray-600">Reset password for <strong>{user.name}</strong>. The user must replace this temporary password on their next login.</p><p className="text-xs text-gray-500">{passwordHelp}</p><Field label="Temporary Password"><input required minLength={8} type="password" className="field" value={password} onChange={(event) => { setPassword(event.target.value); setError(''); }} /></Field>{error && <p className="text-sm text-red-700">{error}</p>}<div className="flex justify-end gap-2"><button className="btn-secondary" type="button" onClick={onClose}>Cancel</button><button className="btn-primary" type="submit">Reset Password</button></div></form></Modal>;
 }
 
 function ArchiveModal({ user, onClose, onConfirm }) {

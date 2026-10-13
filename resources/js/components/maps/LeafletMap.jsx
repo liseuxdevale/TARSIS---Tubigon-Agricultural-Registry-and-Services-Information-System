@@ -75,6 +75,7 @@ export default function LeafletMap({ barangays = [], geoLocations = [], selected
 
         const markers = [];
         const shapes = [];
+        const commodityLabel = [...new Set(geoLocations.map((point) => point.commodity_type).filter(Boolean))].join(', ') || 'Not set';
         const trackPoints = geoLocations
             .filter((point) => point.point_type === 'track_point')
             .sort((left, right) => Number(left.sequence_order || 0) - Number(right.sequence_order || 0))
@@ -82,11 +83,16 @@ export default function LeafletMap({ barangays = [], geoLocations = [], selected
             .filter(([latitude, longitude]) => Number.isFinite(latitude) && Number.isFinite(longitude));
 
         if (trackPoints.length >= 2) {
-            const line = L.polyline(trackPoints, { color: '#0f766e', weight: 3, opacity: 0.85 }).addTo(mapRef.current);
+            const line = L.polyline(trackPoints, { color: '#0f766e', weight: 3, opacity: 0.85 })
+                .addTo(mapRef.current)
+                .bindTooltip(`Commodity: ${escapeHtml(commodityLabel)}`);
             shapes.push(line);
         }
-        if (trackPoints.length >= 4 && sameCoordinate(trackPoints[0], trackPoints[trackPoints.length - 1])) {
-            const polygon = L.polygon(trackPoints, { color: '#0f766e', fillColor: '#14b8a6', fillOpacity: 0.14, weight: 2 }).addTo(mapRef.current);
+        if (trackPoints.length >= 3) {
+            const polygon = L.polygon(trackPoints, { color: '#0f766e', fillColor: '#14b8a6', fillOpacity: 0.14, weight: 2 })
+                .addTo(mapRef.current)
+                .bindPopup(`<strong>Mapped Plot</strong><br>Commodity: ${escapeHtml(commodityLabel)}`)
+                .bindTooltip(`Plot · ${escapeHtml(commodityLabel)}`, { sticky: true });
             shapes.push(polygon);
         }
 
@@ -102,8 +108,8 @@ export default function LeafletMap({ barangays = [], geoLocations = [], selected
                 weight: 2,
             })
                 .addTo(mapRef.current)
-                .bindPopup(`<strong>${point.farmer?.full_name || point.plot_name || 'GPS point'}</strong><br>${point.point_type || 'waypoint'}<br>Lat: ${latitude.toFixed(7)}<br>Lng: ${longitude.toFixed(7)}`)
-                .bindTooltip(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`, {
+                .bindPopup(`<strong>${escapeHtml(point.farmer?.full_name || point.plot_name || 'GPS point')}</strong><br>Commodity: ${escapeHtml(point.commodity_type || 'Not set')}<br>${escapeHtml(point.point_type || 'waypoint')}<br>Lat: ${latitude.toFixed(7)}<br>Lng: ${longitude.toFixed(7)}`)
+                .bindTooltip(`${escapeHtml(point.commodity_type || 'Commodity not set')} · ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`, {
                     direction: 'top',
                     offset: [0, -8],
                     opacity: 0.92,
@@ -138,6 +144,8 @@ export default function LeafletMap({ barangays = [], geoLocations = [], selected
     return <div ref={holderRef} className={`h-[calc(100vh-12rem)] min-h-[760px] w-full overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50 shadow-sm ${className}`} />;
 }
 
-function sameCoordinate(first, second) {
-    return Math.abs(first[0] - second[0]) < 0.0000001 && Math.abs(first[1] - second[1]) < 0.0000001;
+function escapeHtml(value) {
+    return String(value).replace(/[&<>'"]/g, (character) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;',
+    })[character]);
 }

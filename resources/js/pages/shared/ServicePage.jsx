@@ -4,7 +4,7 @@ import { Card, DataTable, Field, Modal, PageHeader, PageLoader, Select, SearchBa
 import { assistanceStatuses, insuranceApprovalStatuses, insuranceEndorsementStatuses, sectors } from '../../constants/options';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
-import { formatDate, today } from '../../utils/format';
+import { formatDate, formatRegistryNumber, today } from '../../utils/format';
 import { roleSector } from '../../utils/rbac';
 
 const assistanceStatusLabels = {
@@ -264,13 +264,19 @@ function ServiceFormModal({ open, row, onClose, kind, registrants, onSaved }) {
                     await api.post(endpoint, payload, { headers: { 'Content-Type': 'multipart/form-data' } });
                 }
             } else {
-                const payload = {
+                const values = {
                     ...form,
                     registrant_id: Number(form.registrant_id),
                     ...insurancePayloadStatuses(form.approval_status),
                 };
+                const payload = new FormData();
+                Object.entries(values).forEach(([key, value]) => {
+                    if (key !== 'photo' && key !== 'evidence_url') payload.append(key, value ?? '');
+                });
+                if (form.photo) payload.append('photo', form.photo);
+                if (editing) payload.append('_method', 'PUT');
                 if (editing) {
-                    await api.put(`${endpoint}/${row.id}`, payload);
+                    await api.post(`${endpoint}/${row.id}`, payload);
                 } else {
                     await api.post(endpoint, payload);
                 }
@@ -330,20 +336,6 @@ function ServiceFormModal({ open, row, onClose, kind, registrants, onSaved }) {
 }
 
 function AssistanceFields({ form, update }) {
-    const [previewUrl, setPreviewUrl] = useState(form.evidence_url || '');
-
-    useEffect(() => {
-        if (!form.photo) {
-            setPreviewUrl(form.evidence_url || '');
-            return undefined;
-        }
-
-        const url = URL.createObjectURL(form.photo);
-        setPreviewUrl(url);
-
-        return () => URL.revokeObjectURL(url);
-    }, [form.evidence_url, form.photo]);
-
     return (
         <>
             <Field label="Sector">
@@ -363,24 +355,18 @@ function AssistanceFields({ form, update }) {
             <Field label="Approved"><input type="date" className="field" value={form.approved_at} onChange={(event) => update('approved_at', event.target.value)} /></Field>
             <Field label="Released"><input type="date" className="field" value={form.released_at} onChange={(event) => update('released_at', event.target.value)} /></Field>
             <Field label="Reason / Details" wide><textarea className="field min-h-24" value={form.description} onChange={(event) => update('description', event.target.value)} placeholder="Describe the assistance request, damage, loss, or supporting details." /></Field>
-            <Field label="Supporting Photo" wide>
-                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3">
-                    <input required className="field" type="file" accept="image/*" onChange={(event) => update('photo', event.target.files?.[0] || null)} />
-                    <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
-                        Required photo evidence for livestock loss, crop damage, or other assistance requests. JPG, PNG, or WebP images up to 5MB are accepted.
-                    </p>
-                    {previewUrl && (
-                        <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                            <img src={previewUrl} alt="Supporting evidence preview" className="max-h-72 w-full object-contain" />
-                        </div>
-                    )}
-                </div>
-            </Field>
         </>
     );
 }
 
 function InsuranceFields({ form, update }) {
+    const [previewUrl, setPreviewUrl] = useState(form.evidence_url || '');
+    useEffect(() => {
+        if (!form.photo) { setPreviewUrl(form.evidence_url || ''); return undefined; }
+        const url = URL.createObjectURL(form.photo);
+        setPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [form.evidence_url, form.photo]);
     return (
         <>
             <Field label="Claim Type"><Select value={form.claim_type} options={insuranceClaimTypes} labels={insuranceClaimTypeLabels} onChange={(value) => update('claim_type', value)} /></Field>
@@ -389,6 +375,13 @@ function InsuranceFields({ form, update }) {
             <Field label="Estimated Loss"><input type="number" step="0.01" className="field" value={form.estimated_loss} onChange={(event) => update('estimated_loss', event.target.value)} /></Field>
             <Field label="Endorsement"><Select value={form.endorsement_status} options={insuranceEndorsementStatuses} labels={insuranceStatusLabels} onChange={(value) => update('endorsement_status', value)} /></Field>
             <Field label="Status"><Select value={form.approval_status} options={insuranceFormStatuses} labels={insuranceStatusLabels} onChange={(value) => update('approval_status', value)} /></Field>
+            <Field label="Supporting Photo" wide>
+                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3">
+                    <input required={!form.evidence_url} className="field" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => update('photo', event.target.files?.[0] || null)} />
+                    <p className="mt-2 text-xs text-slate-500">Photo evidence for the insurance claim. JPG, PNG, or WebP up to 5MB. Existing photos are kept unless replaced.</p>
+                    {previewUrl && <img src={previewUrl} alt="Insurance supporting evidence preview" className="mt-3 max-h-72 w-full rounded object-contain" />}
+                </div>
+            </Field>
         </>
     );
 }
@@ -396,7 +389,7 @@ function InsuranceFields({ form, update }) {
 function defaultServiceForm(kind) {
     return kind === 'assistance'
         ? { registrant_id: '', assistance_type: '', program_name: '', description: '', photo: null, evidence_url: '', status: 'application_submitted', applied_at: today(), approved_at: '', released_at: '', remarks: '' }
-        : { registrant_id: '', claim_type: insuranceClaimTypes[0], policy_number: '', calamity_event: '', incident_date: today(), estimated_loss: '', endorsement_status: 'claim_submitted', approval_status: 'under_processing', release_status: 'pending', remarks: '' };
+        : { registrant_id: '', photo: null, evidence_url: '', claim_type: insuranceClaimTypes[0], policy_number: '', calamity_event: '', incident_date: today(), estimated_loss: '', endorsement_status: 'claim_submitted', approval_status: 'under_processing', release_status: 'pending', remarks: '' };
 }
 
 function serviceFormFromRow(kind, row) {
@@ -417,6 +410,8 @@ function serviceFormFromRow(kind, row) {
         : {
             registrant_id: row.registrant_id || '',
             claim_type: normalizeInsuranceClaimType(row.claim_type || insuranceClaimTypes[0]),
+            photo: null,
+            evidence_url: row.evidence_url || '',
             policy_number: row.policy_number || '',
             calamity_event: row.calamity_event || '',
             incident_date: dateInput(row.incident_date),
@@ -440,7 +435,6 @@ function assistanceFormData(form, editing) {
     payload.append('approved_at', form.approved_at || '');
     payload.append('released_at', form.released_at || '');
     payload.append('remarks', form.remarks || '');
-    payload.append('photo', form.photo);
 
     return payload;
 }
@@ -462,7 +456,7 @@ function dateInput(value) {
 }
 
 function registrantLabel(registrant) {
-    return [registrant?.registry_number, registrant?.full_name].filter(Boolean).join(' - ');
+    return [formatRegistryNumber(registrant?.registry_number), registrant?.full_name].filter(Boolean).join(' - ');
 }
 
 const insuranceTimelineStatuses = ['claim_submitted', 'documents_verified', 'forwarded_to_pcic', 'under_processing', 'approved', 'released'];

@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, DataTable, EmptyState, InfoRow, PageHeader, PageLoader, StatusBadge } from '../../components/common';
 import { api } from '../../services/api';
 import { useResource } from '../../hooks/useResource';
-import { formatDate, formatJson } from '../../utils/format';
+import { formatDate, formatJson, formatRegistryNumber } from '../../utils/format';
 import { ownershipFieldLabel } from '../../utils/registrantLabels';
 import DigitalID from './DigitalID';
 
@@ -30,7 +30,7 @@ function RegistrantProfile({ profile, digitalId, publicView }) {
 
     return (
         <section className="space-y-4">
-            <PageHeader title={profile.full_name} description={profile.registry_number} />
+            <PageHeader title={profile.full_name} description={formatRegistryNumber(profile.registry_number)} />
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_440px] xl:grid-cols-[minmax(0,1fr)_500px]">
                 <Card title="Registrant Profile">
                     <div className="grid gap-2 text-sm md:grid-cols-2">
@@ -49,7 +49,7 @@ function RegistrantProfile({ profile, digitalId, publicView }) {
                         {profile.sector === 'poultry' && storedValue(profile.poultry_type) && <InfoRow label="Poultry" value={storedValue(profile.poultry_type)} />}
                     </div>
                 </Card>
-                <DigitalID registrant={profile} digitalId={digitalId} />
+                <ResponsiveProfileDigitalId registrant={profile} digitalId={digitalId} />
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
                 <Card title="Assistance History">
@@ -57,7 +57,7 @@ function RegistrantProfile({ profile, digitalId, publicView }) {
                         storedValue(row.program_name),
                         storedValue(row.assistance_type),
                         publicView ? storedValue(row.status) : <StatusBadge status={row.status} />,
-                        publicView ? storedValue(row.released_at) : formatDate(row.released_at),
+                        formatDate(row.released_at),
                     ])} />
                 </Card>
                 <Card title="Insurance Records">
@@ -72,6 +72,43 @@ function RegistrantProfile({ profile, digitalId, publicView }) {
             </div>
             {publicView && <p className="text-center text-xs text-slate-500">This profile is shown from the QR code and reflects records encoded by the MAO.</p>}
         </section>
+    );
+}
+
+function ResponsiveProfileDigitalId({ registrant, digitalId }) {
+    const frameRef = useRef(null);
+    const previewRef = useRef(null);
+    const [fit, setFit] = useState({ scale: 1, height: 0 });
+    const [actionsContainer, setActionsContainer] = useState(null);
+
+    useEffect(() => {
+        const frame = frameRef.current;
+        const preview = previewRef.current;
+        if (!frame || !preview) return undefined;
+
+        const updateFit = () => {
+            const naturalWidth = 1280;
+            const scale = Math.min(1, frame.clientWidth / naturalWidth);
+            setFit({ scale, height: preview.scrollHeight * scale });
+        };
+
+        updateFit();
+        const observer = new ResizeObserver(updateFit);
+        observer.observe(frame);
+        observer.observe(preview);
+
+        return () => observer.disconnect();
+    }, [registrant?.id, digitalId]);
+
+    return (
+        <div className="min-w-0">
+        <div ref={frameRef} className="w-full overflow-hidden" style={{ height: fit.height || undefined }}>
+            <div ref={previewRef} className="w-[1280px] max-w-none origin-top-left" style={{ transform: `scale(${fit.scale})` }}>
+                <DigitalID registrant={registrant} digitalId={digitalId} actionsContainer={actionsContainer} />
+            </div>
+        </div>
+        <div ref={setActionsContainer} />
+        </div>
     );
 }
 

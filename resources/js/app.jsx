@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import './i18n';
@@ -30,8 +30,8 @@ import AnnouncementManagement from './pages/announcements/AnnouncementManagement
 import RegistrationManagement from './pages/admin/RegistrationManagement';
 import BarangayCoverage from './pages/admin/BarangayCoverage';
 import GeoMapping from './pages/admin/GeoMapping';
-import Tracking from './pages/admin/Tracking';
 import Reports from './pages/reports/Reports';
+import DownloadableFiles from './pages/shared/DownloadableFiles';
 import AuditLogs from './pages/admin/AuditLogs';
 import UserManagement from './pages/admin/UserManagement';
 import ArchivedRecords from './pages/admin/ArchivedRecords';
@@ -78,8 +78,8 @@ function App() {
                         <Route path="/admin/registrations" element={<RequireRole roles={[ROLES.SUPER_ADMIN, ROLES.MAO_STAFF, ROLES.BARANGAY_STAFF, ROLES.CROP_HEAD, ROLES.FISH_HEAD, ROLES.LIVESTOCK_HEAD, ROLES.POULTRY_HEAD]}><RegistrationManagement /></RequireRole>} />
                         <Route path="/admin/barangays" element={<RequireRole roles={[ROLES.SUPER_ADMIN, ROLES.MAO_STAFF, ROLES.BARANGAY_STAFF, ROLES.CROP_HEAD, ROLES.FISH_HEAD, ROLES.LIVESTOCK_HEAD, ROLES.POULTRY_HEAD]}><BarangayCoverage /></RequireRole>} />
                         <Route path="/admin/geo-mapping" element={<RequireRole roles={[ROLES.SUPER_ADMIN, ROLES.MAO_STAFF, ROLES.CROP_HEAD, ROLES.FISH_HEAD, ROLES.LIVESTOCK_HEAD, ROLES.POULTRY_HEAD]}><GeoMapping /></RequireRole>} />
-                        <Route path="/admin/tracking" element={<RequireRole roles={[ROLES.MAO_STAFF]}><Tracking /></RequireRole>} />
                         <Route path="/admin/reports" element={<RequireRole roles={[ROLES.SUPER_ADMIN, ROLES.MAO_STAFF, ROLES.CROP_HEAD, ROLES.FISH_HEAD, ROLES.LIVESTOCK_HEAD, ROLES.POULTRY_HEAD]}><Reports /></RequireRole>} />
+                        <Route path="/admin/downloadable-files" element={<RequireRole roles={[ROLES.SUPER_ADMIN, ROLES.MAO_STAFF, ROLES.FARMER, ROLES.BARANGAY_STAFF]}><DownloadableFiles /></RequireRole>} />
                         <Route path="/admin/archived/registrants" element={<RequireRole roles={[ROLES.SUPER_ADMIN, ROLES.MAO_STAFF, ROLES.CROP_HEAD, ROLES.FISH_HEAD, ROLES.LIVESTOCK_HEAD, ROLES.POULTRY_HEAD]}><ArchivedRecords type="registrants" /></RequireRole>} />
                         <Route path="/admin/archived/assistance" element={<RequireRole roles={[ROLES.SUPER_ADMIN, ROLES.MAO_STAFF, ROLES.CROP_HEAD, ROLES.FISH_HEAD, ROLES.LIVESTOCK_HEAD, ROLES.POULTRY_HEAD]}><ArchivedRecords type="assistance" /></RequireRole>} />
                         <Route path="/admin/archived/insurance" element={<RequireRole roles={[ROLES.SUPER_ADMIN, ROLES.MAO_STAFF, ROLES.CROP_HEAD, ROLES.FISH_HEAD, ROLES.LIVESTOCK_HEAD, ROLES.POULTRY_HEAD]}><ArchivedRecords type="insurance" /></RequireRole>} />
@@ -95,18 +95,23 @@ function App() {
 }
 
 function ScrollToLocation() {
-    const { hash, pathname } = useLocation();
+    const { hash, pathname, state } = useLocation();
+    const firstRender = useRef(true);
 
-    useEffect(() => {
-        if (!hash) {
-            window.scrollTo({ top: 0, left: 0 });
+    useLayoutEffect(() => {
+        const initial = firstRender.current;
+        firstRender.current = false;
+        const behavior = initial || state?.instantScroll || window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
+        if (!hash || (pathname === '/' && hash === '#home')) {
+            window.scrollTo({ top: 0, left: 0, behavior });
             return;
         }
 
-        window.requestAnimationFrame(() => {
-            document.querySelector(hash)?.scrollIntoView({ block: 'start' });
+        const frame = window.requestAnimationFrame(() => {
+            document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: 'start', behavior });
         });
-    }, [hash, pathname]);
+        return () => window.cancelAnimationFrame(frame);
+    }, [hash, pathname, state?.instantScroll]);
 
     return null;
 }

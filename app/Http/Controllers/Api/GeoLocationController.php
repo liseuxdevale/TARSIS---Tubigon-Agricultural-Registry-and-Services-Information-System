@@ -65,6 +65,7 @@ class GeoLocationController extends Controller
             'farmer_id' => ['required_without:registrant_id', 'exists:registrants,id'],
             'registrant_id' => ['required_without:farmer_id', 'exists:registrants,id'],
             'source_file' => ['nullable', 'string', 'max:255'],
+            'commodity_type' => ['required', 'string', 'max:255'],
             'points' => ['required', 'array', 'min:1', 'max:5000'],
             'points.*.plot_name' => ['nullable', 'string', 'max:255'],
             'points.*.point_type' => ['required', Rule::in(['waypoint', 'track_point'])],
@@ -85,6 +86,7 @@ class GeoLocationController extends Controller
                 return GeoLocation::create([
                     ...$point,
                     'farmer_id' => $registrant->id,
+                    'commodity_type' => $data['commodity_type'],
                     'barangay' => $registrant->barangay?->name,
                     'uploaded_by' => $request->user()?->id,
                     'source_file' => $data['source_file'] ?? null,
@@ -242,6 +244,7 @@ class GeoLocationController extends Controller
                     'registry_number' => $location->farmer?->registry_number,
                     'farmer_name' => $location->farmer?->full_name,
                     'plot_name' => $location->plot_name,
+                    'commodity_type' => $location->commodity_type,
                     'point_type' => $location->point_type,
                     'sequence_order' => $location->sequence_order,
                     'barangay' => $location->barangay,

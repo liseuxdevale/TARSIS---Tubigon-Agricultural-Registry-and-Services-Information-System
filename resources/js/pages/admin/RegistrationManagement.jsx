@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Download, MoreVertical } from 'lucide-react';
 import { Card, DataTable, Field, Modal, PageHeader, SearchBar, Select, StatusBadge } from '../../components/common';
 import RsbsaTemplateFirstRenderer from '../../components/rsbsa/RsbsaTemplateFirstRenderer';
+import DuplicateRegistrationWarning from '../../components/rsbsa/DuplicateRegistrationWarning';
 import {
     DEFAULT_RSBSA_CALIBRATION,
     RSBSA_CALIBRATION_STORAGE_KEY,
@@ -10,7 +11,7 @@ import {
 } from '../../components/rsbsa/officialRsbsaTemplate';
 import { fishingGearTypes, registrantStatuses, sectors, ownershipTypes } from '../../constants/options';
 import { api } from '../../services/api';
-import { formatDate, formatJson, parseKeyValue } from '../../utils/format';
+import { dateInputValue, formatDate, formatJson, formatRegistryNumber, parseKeyValue } from '../../utils/format';
 import { assignedBarangayIds, can, isBarangayScoped } from '../../utils/rbac';
 import { useAuth } from '../../contexts/AuthContext';
 import Profile from '../registration/Profile';
@@ -18,7 +19,9 @@ import { ownershipFieldLabel, registrantSectorLabel } from '../../utils/registra
 
 export default function RegistrationManagement() {
     const { user } = useAuth();
-    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const requestedRecord = searchParams.get('record');
+    const [recordError, setRecordError] = useState('');
     const [rows, setRows] = useState([]);
     const [barangays, setBarangays] = useState([]);
     const [query, setQuery] = useState('');
@@ -31,7 +34,32 @@ export default function RegistrationManagement() {
     const [bulkBusy, setBulkBusy] = useState(false);
     const [bulkError, setBulkError] = useState('');
     const [duplicates, setDuplicates] = useState([]);
+    const [differentPair, setDifferentPair] = useState(null);
+    const [reviewReason, setReviewReason] = useState('');
+    const [reviewBusy, setReviewBusy] = useState(false);
+    const [reviewError, setReviewError] = useState('');
+    const [reviewMessage, setReviewMessage] = useState('');
+
+    async function markDifferentPersons() {
+        if (reviewBusy || !reviewReason.trim()) return;
+        setReviewBusy(true);
+        setReviewError('');
+        try {
+            const response = await api.post('/registrants/duplicates/different-persons', {
+                first_id: differentPair[0].id, second_id: differentPair[1].id, reason: reviewReason.trim(),
+            });
+            setDifferentPair(null);
+            setReviewMessage(response.data.message);
+            await detectDuplicates();
+        } catch (error) {
+            setReviewError(error.message || 'Unable to save review.');
+        } finally {
+            setReviewBusy(false);
+        }
+    }
     const [modal, setModal] = useState(null);
+    const [archivedRegistrant, setArchivedRegistrant] = useState(null);
+    const [archiveRefreshWarning, setArchiveRefreshWarning] = useState('');
     const [profile, setProfile] = useState(null);
     const [digitalId, setDigitalId] = useState(null);
     const [openActionMenu, setOpenActionMenu] = useState(null);
@@ -50,6 +78,11 @@ export default function RegistrationManagement() {
     useEffect(() => {
         load();
     }, [sector, status, barangayId]);
+
+    useEffect(() => {
+        if (!requestedRecord || !/^\d+$/.test(requestedRecord)) return;
+        openProfile({ id: requestedRecord }).catch((error) => setRecordError(error.message || 'Unable to access this record.'));
+    }, [requestedRecord]);
 
     useEffect(() => {
         if (!openActionMenu) return undefined;
@@ -81,7 +114,17 @@ export default function RegistrationManagement() {
     async function archive(row, archiveReason) {
         await api.delete(`/registrants/${row.id}`, { data: { archive_reason: archiveReason } });
         setModal(null);
-        navigate('/admin/archived/registrants');
+        setArchivedRegistrant(row);
+        setArchiveRefreshWarning('');
+        setRows((current) => current.filter((item) => item.id !== row.id));
+        setDuplicates((current) => current.map((group) => {
+            const records = group.records.filter((item) => item.id !== row.id);
+            return { ...group, records, total: records.length };
+        }).filter((group) => group.total > 0));
+        const results = await Promise.allSettled([load()]);
+        if (results.some((result) => result.status === 'rejected')) {
+            setArchiveRefreshWarning('The record was archived, but the list could not be fully refreshed. Please refresh the page.');
+        }
     }
 
     async function openProfile(row) {
@@ -157,15 +200,24 @@ export default function RegistrationManagement() {
 
     return (
         <section className="space-y-4">
+            {recordError && <p role="alert" className="text-sm text-red-700">{recordError}</p>}
             <PageHeader
                 title={scoped ? 'My Assigned Barangay Registrants' : 'Registration Management'}
                 description={scoped ? 'Registrants from every barangay assigned to your account.' : 'Approve, search, edit, archive, deactivate, and detect duplicate registrants.'}
             />
             <Card>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[260px_260px_220px] lg:items-end">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
                     <Field label="RSBSA Date From"><input className="field" type="date" value={bulkDateFrom} onChange={(event) => setBulkDateFrom(event.target.value)} /></Field>
                     <Field label="RSBSA Date To"><input className="field" type="date" value={bulkDateTo} onChange={(event) => setBulkDateTo(event.target.value)} /></Field>
-                    <button className="btn-primary gap-2 sm:col-span-2 lg:col-span-1" type="button" disabled={bulkBusy} onClick={bulkDownloadRsbsa}>
+                    <Field label="Barangay">
+                        <Select
+                            value={barangayId}
+                            options={['', ...barangays.map((barangay) => String(barangay.id))]}
+                            labels={{ '': 'All barangays', ...Object.fromEntries(barangays.map((barangay) => [String(barangay.id), barangay.name])) }}
+                            onChange={setBarangayId}
+                        />
+                    </Field>
+                    <button className="btn-primary gap-2" type="button" disabled={bulkBusy} onClick={bulkDownloadRsbsa}>
                         <Download className="h-4 w-4" aria-hidden="true" />
                         {bulkBusy ? 'Generating...' : 'Download RSBSA Form'}
                     </button>
@@ -188,6 +240,17 @@ export default function RegistrationManagement() {
                     {canDetectDuplicates && <button className="btn-secondary" type="button" onClick={detectDuplicates}>Duplicates</button>}
                 </div>
             </Card>
+            {reviewMessage && <p role="status" className="text-sm text-emerald-800">{reviewMessage}</p>}
+            <Modal open={Boolean(differentPair)} title="Mark as Different Persons" onClose={() => { if (!reviewBusy) setDifferentPair(null); }}>
+                <p className="text-sm text-slate-600">Confirm only after reviewing both profiles and supporting identity details. Both records will remain active; only this specific match will be dismissed.</p>
+                {differentPair?.map((record) => <p key={record.id} className="mt-2 font-semibold">{formatRegistryNumber(record.registry_number)} - {record.full_name}</p>)}
+                <div className="mt-4"><Field label="Review reason"><textarea className="field" required maxLength={1000} value={reviewReason} disabled={reviewBusy} onChange={(event) => setReviewReason(event.target.value)} /></Field></div>
+                {reviewError && <p role="alert" className="mt-2 text-sm text-red-700">{reviewError}</p>}
+                <div className="mt-4 flex justify-end gap-2">
+                    <button type="button" className="btn-secondary" disabled={reviewBusy} onClick={() => setDifferentPair(null)}>Cancel</button>
+                    <button type="button" className="btn-primary" disabled={reviewBusy || !reviewReason.trim()} onClick={markDifferentPersons}>{reviewBusy ? 'Saving review…' : 'Confirm Different Persons'}</button>
+                </div>
+            </Modal>
             {duplicates.length > 0 && (
                 <Card
                     title="Duplicate Detection"
@@ -195,20 +258,28 @@ export default function RegistrationManagement() {
                 >
                     <div className="space-y-3">
                         {duplicates.map((group) => (
-                            <div key={group.match} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
-                                <p className="font-semibold text-amber-950">{group.match} - {group.total} records</p>
+                            <div key={`${group.match}|${group.birthday}`} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
+                                <p className="font-semibold text-amber-950">{group.total > 1 ? 'Possible Duplicate' : 'Remaining registrant'}: {group.match} / {formatDate(group.birthday)} - {group.total} records</p>
+                                {group.pairs?.map(([firstId, secondId]) => {
+                                    const pair = [firstId, secondId].map((id) => group.records.find((record) => record.id === id));
+                                    if (pair.some((record) => !record)) return null;
+                                    return <button key={`${firstId}-${secondId}`} type="button" className="mini-btn mt-2 mr-2" onClick={() => { setDifferentPair(pair); setReviewReason(''); setReviewError(''); }}>Mark as Different Persons: {pair.map((record) => formatRegistryNumber(record.registry_number)).join(' / ')}</button>;
+                                })}
                                 <div className="mt-3 space-y-2">
                                     {group.records.map((item) => (
                                         <div key={item.id} className="flex flex-col gap-2 rounded-md border border-amber-200/80 bg-white/80 p-3 sm:flex-row sm:items-center sm:justify-between">
                                             <div className="min-w-0">
-                                                <p className="font-semibold text-slate-950">{item.registry_number} - {item.full_name}</p>
+                                                <p className="font-semibold text-slate-950">{formatRegistryNumber(item.registry_number)} - {item.full_name}</p>
                                                 <p className="text-xs text-slate-600">
                                                     {[registrantSectorLabel(item.sector), item.barangay?.name, item.status].filter(Boolean).join(' / ')}
                                                 </p>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
                                                 <button className="mini-btn" type="button" onClick={() => openProfile(item)}>Profile</button>
-                                                <button className="mini-btn" type="button" onClick={() => setModal({ type: 'edit', row: item })}>Edit</button>
+                                                <button className="mini-btn" type="button" onClick={async () => {
+                                                    try { const response = await api.get(`/registrants/${item.id}`); setModal({ type: 'edit', row: response.data }); }
+                                                    catch (error) { setRecordError(error.message || 'Unable to access this record.'); }
+                                                }}>Edit</button>
                                                 {canApprove && <button className="mini-btn border-red-200 text-red-700 hover:bg-red-50" type="button" onClick={() => setModal({ type: 'archive', row: item })}>Archive</button>}
                                             </div>
                                         </div>
@@ -223,7 +294,7 @@ export default function RegistrationManagement() {
                 <DataTable
                     columns={['Registry', 'Name', 'Sector', 'Barangay', 'Status', 'Actions']}
                     rows={rows.map((row) => [
-                        row.registry_number,
+                        formatRegistryNumber(row.registry_number),
                         row.full_name,
                         registrantSectorLabel(row.sector),
                         row.barangay?.name,
@@ -240,6 +311,11 @@ export default function RegistrationManagement() {
                 />
             </Card>
             <RegistrantActionModal modal={modal} barangays={barangays} user={user} onClose={() => setModal(null)} onSaved={load} onApprove={approve} onDeactivate={deactivate} onArchive={archive} />
+            <Modal open={Boolean(archivedRegistrant)} title="Registrant archived" onClose={() => setArchivedRegistrant(null)}>
+                {archivedRegistrant && <p role="status" className="text-sm leading-6 text-slate-700">{formatRegistryNumber(archivedRegistrant.registry_number)} - {archivedRegistrant.full_name} is archived.</p>}
+                {archiveRefreshWarning && <p role="alert" className="mt-3 text-sm text-amber-700">{archiveRefreshWarning}</p>}
+                <div className="mt-4 flex justify-end"><button type="button" className="btn-primary" onClick={() => setArchivedRegistrant(null)}>OK</button></div>
+            </Modal>
             <Modal open={Boolean(profile)} title="Registrant Profile" onClose={() => setProfile(null)} size="xl">
                 {profile && <Profile profile={profile} digitalId={digitalId} />}
             </Modal>
@@ -324,6 +400,9 @@ function RegistrantActionsMenu({ row, canApprove, openActionMenu, setOpenActionM
 }
 
 function RegistrantActionModal({ modal, barangays, user, onClose, onSaved, onApprove, onDeactivate, onArchive }) {
+    const [duplicateWarning, setDuplicateWarning] = useState(null);
+    const [saveError, setSaveError] = useState('');
+    const [saveBusy, setSaveBusy] = useState(false);
     const row = modal?.row;
     const [form, setForm] = useState(null);
     const [archiveReason, setArchiveReason] = useState('Inactive');
@@ -333,6 +412,15 @@ function RegistrantActionModal({ modal, barangays, user, onClose, onSaved, onApp
     const scoped = isBarangayScoped(user);
 
     useEffect(() => {
+        setArchiveBusy(false);
+        setArchiveError('');
+        setArchiveReason('Inactive');
+        setOtherReason('');
+    }, [modal?.type, row?.id]);
+
+    useEffect(() => {
+        setDuplicateWarning(null);
+        setSaveError('');
         if (row) setForm({ ...row, barangay_id: row.barangay_id || row.barangay?.id || '', expected_text: formatJson(row.expected_production) === 'Not set' ? '' : formatJson(row.expected_production) });
     }, [row]);
 
@@ -342,12 +430,14 @@ function RegistrantActionModal({ modal, barangays, user, onClose, onSaved, onApp
         if (modal.type === 'archive') {
             const finalReason = archiveReason === 'Other' ? otherReason.trim() : archiveReason;
             async function confirmArchive() {
+                if (archiveBusy || !finalReason) return;
                 setArchiveError('');
                 setArchiveBusy(true);
                 try {
                     await onArchive(row, finalReason);
                 } catch (error) {
                     setArchiveError(error.message || 'Unable to archive registrant.');
+                } finally {
                     setArchiveBusy(false);
                 }
             }
@@ -355,7 +445,7 @@ function RegistrantActionModal({ modal, barangays, user, onClose, onSaved, onApp
             return (
                 <Modal open title="Archive Registrant" onClose={onClose}>
                     <p className="text-sm text-slate-600">Select the reason for archiving this registrant record.</p>
-                    <p className="mt-2 font-semibold">{row.registry_number} - {row.full_name}</p>
+                    <p className="mt-2 font-semibold">{formatRegistryNumber(row.registry_number)} - {row.full_name}</p>
                     <div className="mt-4 space-y-3">
                         <Field label="Archive Reason">
                             <Select value={archiveReason} options={archiveReasons} onChange={setArchiveReason} />
@@ -381,7 +471,7 @@ function RegistrantActionModal({ modal, barangays, user, onClose, onSaved, onApp
         return (
             <Modal open title={copy[0]} onClose={onClose}>
                 <p className="text-sm text-slate-600">{copy[1]}</p>
-                <p className="mt-2 font-semibold">{row.registry_number} - {row.full_name}</p>
+                <p className="mt-2 font-semibold">{formatRegistryNumber(row.registry_number)} - {row.full_name}</p>
                 <div className="mt-4 flex justify-end gap-2">
                     <button className="btn-secondary" onClick={onClose}>Cancel</button>
                     <button className="btn-primary" onClick={copy[2]}>Confirm</button>
@@ -396,8 +486,11 @@ function RegistrantActionModal({ modal, barangays, user, onClose, onSaved, onApp
         setForm((current) => ({ ...current, [name]: value }));
     }
 
-    async function submit(event) {
-        event.preventDefault();
+    async function submit(event, reviewToken = null) {
+        event?.preventDefault();
+        if (saveBusy) return;
+        setSaveBusy(true);
+        setSaveError('');
         const payload = {
             ...form,
             barangay_id: Number(form.barangay_id),
@@ -405,20 +498,30 @@ function RegistrantActionModal({ modal, barangays, user, onClose, onSaved, onApp
             expected_production: parseKeyValue(form.expected_text),
         };
         if (scoped) delete payload.status;
-        await api.put(`/registrants/${row.id}`, payload);
-        onClose();
-        onSaved();
+        if (reviewToken) payload.duplicate_review_token = reviewToken;
+        try {
+            await api.put(`/registrants/${row.id}`, payload);
+            setDuplicateWarning(null);
+            onClose();
+            onSaved();
+        } catch (error) {
+            if (['possible_duplicate', 'duplicate_registry_number'].includes(error.response?.data?.code)) setDuplicateWarning(error.response.data);
+            else setSaveError(error.message || 'Unable to save the record.');
+        } finally { setSaveBusy(false); }
     }
 
     return (
-        <Modal open title="Edit Registrant" onClose={onClose} size="xl">
+        <>
+        <DuplicateRegistrationWarning warning={duplicateWarning} busy={saveBusy} onClose={() => setDuplicateWarning(null)} onContinue={(token) => submit(null, token)} />
+        <Modal open={!duplicateWarning} title="Edit Registrant" onClose={onClose} size="xl">
             <form onSubmit={submit} className="grid gap-3 md:grid-cols-2">
+                {saveError && <p role="alert" className="text-sm text-red-700 md:col-span-2">{saveError}</p>}
                 <Field label="Sector"><Select value={form.sector} options={sectors} onChange={(value) => update('sector', value)} /></Field>
                 {!scoped && <Field label="Status"><Select value={form.status} options={registrantStatuses} onChange={(value) => update('status', value)} /></Field>}
                 <Field label="First Name"><input required className="field" value={form.first_name || ''} onChange={(event) => update('first_name', event.target.value)} /></Field>
                 <Field label="Middle Name"><input className="field" value={form.middle_name || ''} onChange={(event) => update('middle_name', event.target.value)} /></Field>
                 <Field label="Last Name"><input required className="field" value={form.last_name || ''} onChange={(event) => update('last_name', event.target.value)} /></Field>
-                <Field label="Birthday"><input required type="date" className="field" value={formatDate(form.birthday) === 'Not set' ? '' : formatDate(form.birthday)} onChange={(event) => update('birthday', event.target.value)} /></Field>
+                <Field label="Birthday"><input required type="date" className="field" value={dateInputValue(form.birthday)} onChange={(event) => update('birthday', event.target.value)} /></Field>
                 <Field label="Barangay">
                     <select required disabled={scoped && barangays.length <= 1} className="field" value={form.barangay_id} onChange={(event) => update('barangay_id', event.target.value)}>
                         {barangays.map((barangay) => <option key={barangay.id} value={barangay.id}>{barangay.name}</option>)}
@@ -436,10 +539,11 @@ function RegistrantActionModal({ modal, barangays, user, onClose, onSaved, onApp
                 <Field label="Address" wide><textarea required className="field min-h-20" value={form.address || ''} onChange={(event) => update('address', event.target.value)} /></Field>
                 <div className="flex justify-end gap-2 md:col-span-2">
                     <button className="btn-secondary" type="button" onClick={onClose}>Cancel</button>
-                    <button className="btn-primary">Save changes</button>
+                    <button className="btn-primary" disabled={saveBusy}>{saveBusy ? 'Saving...' : 'Save changes'}</button>
                 </div>
             </form>
         </Modal>
+        </>
     );
 }
 

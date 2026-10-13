@@ -17,8 +17,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/auth/register', [AuthController::class, 'register']);
-Route::get('/public/registrants/{registryNumber}/rsbsa-preview', [RegistrantController::class, 'rsbsaPreview']);
-Route::get('/public/registrants/{registryNumber}', [RegistrantController::class, 'publicProfile']);
+Route::middleware('jwt')->get('/public/registrants/{registryNumber}/rsbsa-preview', [RegistrantController::class, 'rsbsaPreview']);
+Route::middleware('jwt')->get('/public/registrants/{registryNumber}', [RegistrantController::class, 'publicProfile']);
 Route::get('/barangays', [BarangayController::class, 'index']);
 Route::get('/announcements', [AnnouncementController::class, 'index']);
 Route::middleware('jwt')->get('/announcements/visible', [AnnouncementController::class, 'index']);
@@ -28,6 +28,13 @@ Route::post('/announcements/{announcement}/comments', [AnnouncementCommentContro
 Route::post('/announcements/{announcement}/comments/{comment}/react', [AnnouncementCommentController::class, 'react']);
 
 Route::middleware('jwt')->group(function () {
+    Route::get('/downloadable-files', [\App\Http\Controllers\Api\DownloadableFileController::class, 'index'])->middleware('role:super_admin,mao_staff,farmer,barangay_technical_staff');
+    Route::post('/downloadable-files', [\App\Http\Controllers\Api\DownloadableFileController::class, 'store'])->middleware('role:super_admin');
+    Route::delete('/downloadable-files/{file}', [\App\Http\Controllers\Api\DownloadableFileController::class, 'destroy'])->middleware('role:super_admin');
+    Route::get('/downloadable-files/{file}', [\App\Http\Controllers\Api\DownloadableFileController::class, 'show'])->middleware('role:super_admin,mao_staff,farmer,barangay_technical_staff');
+    Route::get('/announcements/{announcement}/comments/manage', [AnnouncementCommentController::class, 'index']);
+    Route::post('/announcements/{announcement}/comments/authenticated', [AnnouncementCommentController::class, 'store']);
+    Route::post('/announcements/{announcement}/comments/{comment}/manage', [AnnouncementCommentController::class, 'manage']);
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::get('/auth/activity', [AuthController::class, 'activity']);
     Route::post('/auth/avatar', [AuthController::class, 'updateAvatar']);
@@ -49,6 +56,7 @@ Route::middleware('jwt')->group(function () {
     Route::apiResource('barangays', BarangayController::class)->except(['index'])->middleware('role:super_admin,mao_staff');
 
     Route::get('/registrants/duplicates', [RegistrantController::class, 'duplicates'])->middleware('role:super_admin,mao_staff,crop_head,fish_head,livestock_head,poultry_head');
+    Route::post('/registrants/duplicates/different-persons', [RegistrantController::class, 'markDifferentPersons'])->middleware('role:super_admin,mao_staff,crop_head,fish_head,livestock_head,poultry_head');
     Route::get('/registrants/rsbsa-bulk-download', [RegistrantController::class, 'rsbsaBulk'])->middleware('role:super_admin,mao_staff,crop_head,fish_head,livestock_head,poultry_head');
     Route::get('/archived/registrants', [ArchivedRecordController::class, 'registrants'])->middleware('role:super_admin,mao_staff,crop_head,fish_head,livestock_head,poultry_head');
     Route::post('/archived/registrants/{id}/restore', [ArchivedRecordController::class, 'restoreRegistrant'])->middleware('role:super_admin,mao_staff,crop_head,fish_head,livestock_head,poultry_head');
@@ -75,6 +83,7 @@ Route::middleware('jwt')->group(function () {
     Route::get('/notification-deliveries', [NotificationDeliveryController::class, 'index']);
     Route::post('/notifications/resend-bulk', [NotificationDeliveryController::class, 'resendBulk'])->middleware('role:super_admin,mao_staff,crop_head,fish_head,livestock_head,poultry_head');
     Route::post('/notifications/{notificationDelivery}/resend', [NotificationDeliveryController::class, 'resend'])->middleware('role:super_admin,mao_staff,crop_head,fish_head,livestock_head,poultry_head');
+    Route::delete('/notification-deliveries/clear-history', [NotificationDeliveryController::class, 'clearHistory'])->middleware('role:super_admin,mao_staff,crop_head,fish_head,livestock_head,poultry_head');
     Route::apiResource('notification-deliveries', NotificationDeliveryController::class)->only(['store', 'update', 'destroy'])->middleware('role:super_admin,mao_staff,crop_head,fish_head,livestock_head,poultry_head');
     Route::get('/audit-logs', [AuditLogController::class, 'index'])->middleware('role:super_admin');
     Route::get('/audit-logs/export', [AuditLogController::class, 'export'])->middleware('role:super_admin');

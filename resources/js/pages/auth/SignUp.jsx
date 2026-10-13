@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import MaoSeal from '../../components/landing/MaoSeal';
+import { isStrongPassword, passwordHelp } from '../../utils/passwordPolicy';
 import { useAuth } from '../../contexts/AuthContext';
 import { Alert, AuthShell, FieldError, Spinner, authButtonClass, fieldClass } from './SignIn';
 
@@ -45,7 +46,7 @@ export default function SignUp() {
         if (!form.phone.trim()) next.phone = 'Mobile number is required.';
         else if (!/^09\d{9}$/.test(normalizePhone(form.phone))) next.phone = 'Enter an 11-digit mobile number starting with 09.';
         if (!form.password) next.password = 'Password is required.';
-        else if (form.password.length < 8) next.password = 'Password must be at least 8 characters.';
+        else if (!isStrongPassword(form.password)) next.password = passwordHelp;
         if (form.password_confirmation !== form.password) next.password_confirmation = 'Passwords must match.';
         setErrors(next);
         return !Object.keys(next).length;
@@ -102,6 +103,7 @@ export default function SignUp() {
                             </AuthField>
                             <AuthField label="Password" error={errors.password}>
                                 <input className={fieldClass(errors.password)} type="password" value={form.password} onChange={(event) => update('password', event.target.value)} autoComplete="new-password" placeholder="At least 8 characters" />
+                                <p className="mt-1 text-xs text-gray-500">{passwordHelp}</p>
                             </AuthField>
                             <AuthField label="Confirm password" error={errors.password_confirmation}>
                                 <input className={fieldClass(errors.password_confirmation)} type="password" value={form.password_confirmation} onChange={(event) => update('password_confirmation', event.target.value)} autoComplete="new-password" placeholder="Repeat password" />

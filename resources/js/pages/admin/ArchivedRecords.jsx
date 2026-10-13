@@ -14,6 +14,8 @@ const archiveTitles = {
     insurance: 'Archived Insurance Applications',
 };
 
+const assistanceTypes = ['fisheries', 'crop', 'livestock', 'poultry', 'livestock_loss', 'other'];
+
 export default function ArchivedRecords({ type }) {
     const { user } = useAuth();
     const [rows, setRows] = useState([]);
@@ -87,7 +89,14 @@ export default function ArchivedRecords({ type }) {
                 <div className="grid gap-3 md:grid-cols-4">
                     <Field label="Search"><SearchBar value={filters.search} onChange={(value) => update('search', value)} placeholder={searchPlaceholder(type)} /></Field>
                     {type === 'registrants' && !scopedSector && <Field label="Sector"><Select value={filters.sector} options={['', ...sectors]} labels={{ '': 'All sectors' }} onChange={(value) => update('sector', value)} /></Field>}
-                    {type === 'assistance' && <Field label="Assistance Type"><input className="field" value={filters.assistance_type} onChange={(event) => update('assistance_type', event.target.value)} /></Field>}
+                    {type === 'assistance' && <Field label="Assistance Type">
+                        <Select
+                            value={filters.assistance_type}
+                            options={['', ...assistanceTypes]}
+                            labels={{ '': 'Select assistance type', livestock_loss: 'livestock loss' }}
+                            onChange={(value) => update('assistance_type', value)}
+                        />
+                    </Field>}
                     {type === 'insurance' && <Field label="Insurance Type"><input className="field" value={filters.claim_type} onChange={(event) => update('claim_type', event.target.value)} /></Field>}
                     {type === 'insurance' && <Field label="Claim Status"><Select value={filters.claim_status} options={['', ...insuranceApprovalStatuses, 'released']} labels={{ '': 'All statuses' }} onChange={(value) => update('claim_status', value)} /></Field>}
                     <Field label="Barangay">

@@ -210,6 +210,13 @@
         border-color: var(--role-border) !important;
     }
 
+    button:not(:disabled),
+    input[type='button']:not(:disabled),
+    input[type='submit']:not(:disabled),
+    input[type='reset']:not(:disabled) {
+        cursor: pointer;
+    }
+
     button,
     input,
     select,
@@ -1538,7 +1545,7 @@
     .id-details {
         position: absolute;
         left: 26.9%;
-        right: 23.4%;
+        right: 25.4%;
         top: 4.4%;
         min-width: 0;
     }
@@ -1565,6 +1572,37 @@
         margin-top: 6.0%;
         font-size: clamp(8px, 1.49cqw, 11.8px);
     }
+
+    .id-details .id-commodities {
+        font-size: clamp(16px, 3.05cqw, 24.1px);
+        line-height: 1.2;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .id-details .id-sector-badge {
+        display: flex;
+        align-items: baseline;
+        gap: .25em;
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .id-sector-badge > span:first-child {
+        flex-shrink: 0;
+    }
+
+    .id-sector-badge-values {
+        min-width: 0;
+        font-size: .82em;
+        white-space: nowrap;
+    }
+
+    .id-sector-badge-poultry {
+        display: block;
+    }
+
 
     .id-number-text {
         font-family: Arial, Helvetica, sans-serif;
@@ -1631,7 +1669,7 @@
         position: absolute;
         z-index: 3;
         left: 39.4%;
-        bottom: 14.6%;
+        bottom: 8%;
         width: 25.2%;
         border-top: clamp(1px, .18cqw, 1.4px) solid #111827;
         text-align: center;
@@ -1659,7 +1697,7 @@
         position: absolute;
         left: 10.0%;
         right: 10.0%;
-        top: 19.0%;
+        top: 16.0%;
         color: #030712;
         font-family: Georgia, 'Times New Roman', serif;
         z-index: 1;
@@ -1727,11 +1765,26 @@
         overflow-wrap: anywhere;
     }
 
+    .id-admin-signature {
+        position: absolute;
+        left: 36%;
+        width: 28%;
+        bottom: 18%;
+        border-top: clamp(1px, .18cqw, 1.4px) solid #111827;
+        padding-top: .6%;
+        text-align: center;
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: clamp(11px, 2.1cqw, 16.6px);
+        line-height: 1.2;
+        color: #030712;
+        z-index: 1;
+    }
+
     .id-back-note {
         position: absolute;
         left: 10.0%;
         right: 10.0%;
-        bottom: 16.0%;
+        bottom: 9.0%;
         text-align: center;
         color: #64748b;
         font-family: Arial, Helvetica, sans-serif;
@@ -1918,7 +1971,17 @@
         margin-top: 1.25%;
     }
 
+    .tarsis-id-card .id-details .id-commodities {
+        font-size: 10.7pt;
+        line-height: 1.2;
+    }
+
+
     .tarsis-id-card .id-signature strong {
+        font-size: 8.3pt;
+    }
+
+    .tarsis-id-card .id-admin-signature {
         font-size: 8.3pt;
     }
 
@@ -1990,4 +2053,3 @@
         color: var(--role-muted);
         opacity: .85;
     }
-

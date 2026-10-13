@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\RegistrantDuplicateService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -43,6 +44,11 @@ class Registrant extends Model
     ];
 
     protected $appends = ['full_name', 'photo_url'];
+
+    public function setRegistryNumberAttribute($value): void
+    {
+        $this->attributes['registry_number'] = RegistrantDuplicateService::number($value);
+    }
 
     protected function casts(): array
     {

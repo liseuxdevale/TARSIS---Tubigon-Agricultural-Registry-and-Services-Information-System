@@ -5,6 +5,7 @@ import { Card, Field, InfoRow, PageHeader } from '../../components/common';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import { ROLES } from '../../utils/rbac';
+import { isStrongPassword, passwordHelp } from '../../utils/passwordPolicy';
 
 const initialPasswordForm = {
     current_password: '',
@@ -56,6 +57,11 @@ function PasswordSection({ user }) {
 
     async function submit(event) {
         event.preventDefault();
+        if (!isStrongPassword(form.password)) {
+            setMessage('');
+            setError(passwordHelp);
+            return;
+        }
         setSaving(true);
         setMessage('');
         setError('');
@@ -80,6 +86,7 @@ function PasswordSection({ user }) {
                     <PasswordInput value={form.current_password} visible={Boolean(visiblePasswords.current_password)} onToggle={() => togglePassword('current_password')} onChange={(value) => update('current_password', value)} autoComplete="current-password" />
                 </Field>
                 <Field label="New Password">
+                    <p className="text-xs text-gray-500">{passwordHelp}</p>
                     <PasswordInput value={form.password} visible={Boolean(visiblePasswords.password)} onToggle={() => togglePassword('password')} onChange={(value) => update('password', value)} autoComplete="new-password" />
                 </Field>
                 <Field label="Confirm New Password">
@@ -256,7 +263,7 @@ function PasswordInput({ value, visible, onToggle, onChange, autoComplete }) {
 function formatDateTime(value) {
     if (!value) return 'Not set';
     return new Intl.DateTimeFormat('en-US', {
-        month: 'short',
+        month: 'long',
         day: 'numeric',
         year: 'numeric',
         hour: 'numeric',

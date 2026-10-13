@@ -259,7 +259,7 @@ function EditAccountModal({ open, account, onClose, onSaved, onUserUpdated, setE
 function formatDateTime(value) {
     if (!value) return 'Not set';
     return new Intl.DateTimeFormat('en-US', {
-        month: 'short',
+        month: 'long',
         day: 'numeric',
         year: 'numeric',
         hour: 'numeric',

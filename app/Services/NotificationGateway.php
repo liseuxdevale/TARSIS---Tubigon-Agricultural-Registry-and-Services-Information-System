@@ -98,9 +98,9 @@ class NotificationGateway
             $response = Http::asForm()->post("https://graph.facebook.com/v20.0/{$pageId}/feed", [
                 'message' => "{$announcement->title}\n\n{$announcement->body}",
                 'access_token' => $token,
-            ])->json();
+            ])->throw()->json();
 
-            $announcement->update(['facebook_post_id' => $response['id'] ?? 'posted']);
+            $announcement->update(['facebook_post_id' => !empty($response['id']) ? $response['id'] : 'failed']);
         } catch (Throwable) {
             $announcement->update(['facebook_post_id' => 'failed']);
         }

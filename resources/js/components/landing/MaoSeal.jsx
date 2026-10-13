@@ -13,7 +13,7 @@ export default function MaoSeal({ size = 56, className = '', variant = 'default'
             width={size}
             height={size}
             className={`inline-block rounded-full border object-cover shadow-sm ${toneClass} ${className}`.trim()}
-            alt="Office of the Municipal Agriculture Tubigon, Bohol official logo"
+            alt="Office of the Municipal Agriculturist Tubigon, Bohol official logo"
         />
     );
 }

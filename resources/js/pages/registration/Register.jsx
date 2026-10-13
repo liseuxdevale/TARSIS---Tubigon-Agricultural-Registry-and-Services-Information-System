@@ -5,14 +5,16 @@ import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import { assignedBarangayIds, isBarangayScoped, sectorAdminRoles } from '../../utils/rbac';
 import { registrantSectorLabel } from '../../utils/registrantLabels';
+import { formatRegistryNumber } from '../../utils/format';
 import DigitalID from './DigitalID';
 import RsbsaTemplateFirstRenderer from '../../components/rsbsa/RsbsaTemplateFirstRenderer';
+import DuplicateRegistrationWarning from '../../components/rsbsa/DuplicateRegistrationWarning';
 
 const educationOptions = ['Pre-school', 'Elementary', 'High School (non K-12)', 'Junior High School (K-12)', 'Senior High School (K-12)', 'College', 'Vocational', 'Post-graduate', 'None'];
 const livelihoodOptions = ['Farmer', 'Farmworker/Laborer', 'Fisherfolk', 'Agri Youth'];
 const farmingActivities = ['Rice', 'Corn', 'Other crops', 'Livestock', 'Poultry'];
 const farmworkerActivities = ['Land Preparation', 'Planting/Transplanting', 'Cultivation', 'Harvesting', 'Others'];
-const fishingActivities = ['Fish Capture', 'Aquaculture', 'Gleaning', 'Fish Processing', 'Fish Vending', 'Others'];
+const fishingActivities = ['Fish Capture', 'Aquaculture', 'Gleaning', 'Fish Processing', 'Fish Vending', 'FishR', 'BoatR', 'Others'];
 const youthActivities = ['Part of a farming household', 'Attending/attended formal agri-fishery related course', 'Attending/attended non-formal agri-fishery related course', 'Participated in any agricultural activity/program', 'Others'];
 const municipalityOptions = ['Tubigon'];
 const provinceOptions = ['Bohol'];
@@ -105,6 +107,7 @@ export default function Register() {
     const [busy, setBusy] = useState(false);
     const [saved, setSaved] = useState(null);
     const [submitError, setSubmitError] = useState('');
+    const [duplicateWarning, setDuplicateWarning] = useState(null);
     const [form, setForm] = useState(initialForm);
     const [photo, setPhoto] = useState(null);
     const [photoPreview, setPhotoPreview] = useState('');
@@ -444,9 +447,16 @@ export default function Register() {
         updateParcel(parcelIndex, 'commodities', form.parcels[parcelIndex].commodities.filter((_, row) => row !== commodityIndex));
     }
 
-    async function submit(event) {
-        event.preventDefault();
+    async function submit(event, reviewToken = null) {
+        event?.preventDefault();
+        if (busy) return;
         setSubmitError('');
+        const missingActivities = selectedActivityGroups.find(([field]) => !form[field]?.length);
+        if (missingActivities) {
+            setSubmitError(`Select at least one activity for ${missingActivities[3]}.`);
+            document.getElementById('activities')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            return;
+        }
         setBusy(true);
 
         const firstParcel = form.parcels[0] || emptyParcel();
@@ -489,6 +499,7 @@ export default function Register() {
                 if (value !== null && value !== undefined) body.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
             });
             if (photo) body.append('photo', photo);
+            if (reviewToken) body.append('duplicate_review_token', reviewToken);
             const updatesExistingRegistrant = form.enrollment_type === 'Updating' && referenceRegistrant?.id;
             if (updatesExistingRegistrant) body.append('_method', 'PUT');
             const response = updatesExistingRegistrant
@@ -498,6 +509,10 @@ export default function Register() {
             setSaved(response.data);
             navigate(`/rsbsa-preview/${response.data.registry_number}`);
         } catch (error) {
+            if (['possible_duplicate', 'duplicate_registry_number'].includes(error.response?.data?.code)) {
+                setDuplicateWarning(error.response.data);
+                return;
+            }
             setSubmitError(error.message || 'The registration could not be submitted. Please review the required fields.');
             window.scrollTo({ top: 0, behavior: 'smooth' });
         } finally {
@@ -523,25 +538,14 @@ export default function Register() {
 
     if (isBeneficiaryUser && linkedRegistrantLoading) return <PageLoader />;
 
-    if (isBeneficiaryUser && linkedRegistrant && !showRegistrationForm) {
+    if (isBeneficiaryUser && linkedRegistrant) {
         return (
             <section className="space-y-5 pb-8">
                 <PageHeader
                     title="RSBSA Registration"
-                    description="Review your submitted RSBSA form. Use Edit to update your registration details."
+                    description="Review your submitted RSBSA form. Contact MAO staff if your registration details need updating."
                     actions={(
                         <>
-                            <button
-                                type="button"
-                                className="btn-secondary"
-                                onClick={() => {
-                                    setReferenceRegistrant(linkedRegistrant);
-                                    populateFormFromReference(linkedRegistrant);
-                                    setShowRegistrationForm(true);
-                                }}
-                            >
-                                Edit Registration
-                            </button>
                             {linkedRegistryNumber && (
                                 <Link className="btn-primary" to={`/rsbsa-preview/${encodeURIComponent(linkedRegistryNumber)}/mao-id`}>
                                     View MAO ID
@@ -559,6 +563,7 @@ export default function Register() {
 
     return (
         <section className="space-y-5 pb-8">
+            <DuplicateRegistrationWarning warning={duplicateWarning} busy={busy} onClose={() => setDuplicateWarning(null)} onContinue={(token) => submit(null, token)} />
             <PageHeader
                 title="RSBSA Registration"
                 description="Modern government portal registration form for agriculture sector enrollment."
@@ -707,11 +712,11 @@ export default function Register() {
                     {form.association_member === 'Yes' && <Field label="Association Name" required><input required className="field" value={form.association_name} onChange={(event) => update('association_name', event.target.value)} /></Field>}
                 </ModernSection>
 
-                <ModernSection id="livelihood" title="Main Livelihood">
+                <ModernSection id="livelihood" title={<>Main Livelihood <span className="text-red-600">*</span></>}>
                     <LivelihoodCards value={selectedLivelihoods} onChange={(value) => update('main_livelihood', value)} />
                 </ModernSection>
 
-                <ModernSection id="activities" title="Activities">
+                <ModernSection id="activities" title={<>Activities <span className="text-red-600">*</span></>} description="Select one or more activities for each selected livelihood.">
                     {selectedActivityGroups.map(([activityField, activityOptions, activityOtherField, activityTitle]) => (
                         <React.Fragment key={activityField}>
                             <ActivityCard title={activityTitle} options={activityOptions} values={form[activityField]} toggle={(value) => toggle(activityField, value)} />
@@ -755,7 +760,7 @@ export default function Register() {
                     <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
                         <div className="space-y-3">
                             <p className="text-sm text-slate-600">Registry number</p>
-                            <p className="text-3xl font-semibold text-emerald-800">{saved.registry_number}</p>
+                            <p className="text-3xl font-semibold text-emerald-800">{formatRegistryNumber(saved.registry_number)}</p>
                             <StatusBadge status={saved.status} />
                             <div><Link className="btn-primary" to={`/rsbsa-preview/${saved.registry_number}`}>Open Print Preview</Link></div>
                         </div>
@@ -976,7 +981,7 @@ function RegisteredUsersList({ rows, loading, error, onSelect }) {
                 {! loading && ! error && rows.map((row) => (
                     <button key={row.id} type="button" onClick={() => onSelect(row)} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-left transition hover:border-emerald-300 hover:bg-emerald-50">
                         <span className="block text-sm font-semibold text-slate-900">{row.full_name || [row.first_name, row.last_name].filter(Boolean).join(' ')}</span>
-                        <span className="mt-1 block text-xs text-slate-500">{row.registry_number || 'No registry number'}{row.barangay?.name ? ` - ${row.barangay.name}` : ''}</span>
+                        <span className="mt-1 block text-xs text-slate-500">{formatRegistryNumber(row.registry_number) || 'No registry number'}{row.barangay?.name ? ` - ${row.barangay.name}` : ''}</span>
                     </button>
                 ))}
             </div>

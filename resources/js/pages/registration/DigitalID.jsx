@@ -1,5 +1,7 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
+import { digitalIdLivelihoodDetails } from '../../utils/registrantLabels';
 
 const sectorBadges = {
     farmer: 'CROP',
@@ -8,17 +10,30 @@ const sectorBadges = {
     poultry: 'POULTRY',
 };
 
-export default function DigitalID({ registrant, digitalId, printable = false }) {
+export default function DigitalID({ registrant, digitalId, printable = false, actionsContainer = null }) {
     const data = { ...(registrant || {}), ...(digitalId || {}) };
     const registryNumber = data.registry_number || '';
     const name = (data.name || data.full_name || [data.first_name, data.middle_name, data.last_name, data.suffix].filter(Boolean).join(' ')).trim();
     const validity = validityRange(data.created_at);
     const sectorBadge = sectorBadgeLabel(data);
-    const ownershipType = data.ownership_type || data.rsbsa_payload?.parcels?.[0]?.ownership_type || 'Not set';
-    const barangay = data.barangay?.name || data.rsbsa_payload?.barangay_name || data.rsbsa_payload?.barangay || 'Not set';
+    const ownershipDetails = digitalIdLivelihoodDetails(data);
+    const barangay = digitalId?.barangay?.name
+        || (typeof digitalId?.barangay === 'string' ? digitalId.barangay : '')
+        || registrant?.barangay?.name
+        || (typeof registrant?.barangay === 'string' ? registrant.barangay : '')
+        || data.rsbsa_payload?.barangay_name
+        || data.rsbsa_payload?.barangay
+        || 'Not set';
     const contactNumber = data.phone || data.rsbsa_payload?.phone || 'Not set';
     const emergencyContact = data.rsbsa_payload?.emergency_contact || 'Not set';
     const address = data.address || data.rsbsa_payload?.address_line || 'Not set';
+    const parcels = data.rsbsa_payload?.parcels;
+    const commodityValues = (Array.isArray(parcels) ? parcels : []).flatMap((parcel) =>
+        Array.isArray(parcel.commodities) ? parcel.commodities.map((item) => item.commodity) : []);
+    const commodities = [...new Map([...commodityValues, data.livestock_type, data.poultry_type]
+        .map((value) => String(value || '').trim())
+        .filter((value) => value && !['n/a', 'not set'].includes(value.toLowerCase()))
+        .map((value) => [value.toLowerCase(), value])).values()].join(', ') || 'Not recorded';
     const landbankAccount = data.landbank_account_number || data.land_bank_account_number || data.landbank_account || data.bank_account_number || '';
     const photoUrl = digitalId?.photo_url || registrant?.photo_url || '';
     const qrPayload = data.qr_payload || `${window.location.origin}/profile/${registryNumber}`;
@@ -33,6 +48,14 @@ export default function DigitalID({ registrant, digitalId, printable = false }) 
         anchor.click();
         URL.revokeObjectURL(url);
     }
+
+    const actions = (
+        <div className="tarsis-id-actions mt-4 flex flex-wrap gap-3">
+            <button className="btn-primary min-h-12 cursor-pointer px-6 py-3 text-base" type="button" onClick={() => window.print()}>Print</button>
+            {registryNumber && <Link className="btn-secondary min-h-12 cursor-pointer px-6 py-3 text-base" to={`/rsbsa-preview/${encodeURIComponent(registryNumber)}`}>View RSBSA Form</Link>}
+            <button className="btn-secondary min-h-12 cursor-pointer px-6 py-3 text-base" type="button" onClick={downloadQr}>Download QR</button>
+        </div>
+    );
 
     return (
         <div className={printable ? 'tarsis-id-print-wrap' : 'tarsis-id-host'}>
@@ -49,11 +72,11 @@ export default function DigitalID({ registrant, digitalId, printable = false }) 
                     <img src="/images/tubigon-official-seal.png" alt="Municipality of Tubigon official seal" />
                 </div>
                 <div className="id-seal id-seal-right">
-                    <img src="/images/tarsis-official-logo.jpg" alt="Office of the Municipal Agriculture Tubigon, Bohol official logo" />
+                    <img src="/images/tarsis-official-logo.jpg" alt="Office of the Municipal Agriculturist Tubigon, Bohol official logo" />
                 </div>
                 <header className="id-header">
                     <p>REPUBLIC OF THE PHILIPPINES</p>
-                    <h2>OFFICE OF THE MUNICIPAL AGRICULTURE</h2>
+                    <h2>OFFICE OF THE MUNICIPAL AGRICULTURIST</h2>
                     <h3>TUBIGON, BOHOL</h3>
                 </header>
                 <section className="id-body">
@@ -69,7 +92,16 @@ export default function DigitalID({ registrant, digitalId, printable = false }) 
                     <div className="id-details">
                         <h4>{name || 'REGISTRANT NAME'}</h4>
                         <p>Registration No. {numberFont(registryNumber || 'Pending')}</p>
-                        <p>Sector Badge: {sectorBadge}</p>
+                        <p className="id-sector-badge">
+                            <span>Sector Badge:</span>
+                            <span className="id-sector-badge-values">
+                                {sectorBadge.split(' | ').filter((badge) => badge !== 'POULTRY').join(' | ')}
+                                {sectorBadge.split(' | ').includes('POULTRY') && (
+                                    <span className="id-sector-badge-poultry">POULTRY</span>
+                                )}
+                            </span>
+                        </p>
+                        <p className="id-commodities">Commodity: {commodities}</p>
                         <p>Barangay: {barangay}</p>
                         <p>Validity: {numberFont(validity)}</p>
                         {landbankAccount && <p className="id-bank-account">LandBank Account No. {numberFont(landbankAccount)}</p>}
@@ -96,8 +128,8 @@ export default function DigitalID({ registrant, digitalId, printable = false }) 
                 <img className="id-back-watermark" src="/images/tarsis-official-logo.jpg" alt="" aria-hidden="true" />
                 <section className="id-back-middle">
                     <div className="id-back-primary">
-                        <span>Type of Ownership</span>
-                        <strong>{ownershipType}</strong>
+                        <span>{ownershipDetails.label}</span>
+                        <strong>{ownershipDetails.value}</strong>
                     </div>
                     <div className="id-back-grid">
                         <p><span>Contact No.</span>{numberFont(contactNumber)}</p>
@@ -105,22 +137,15 @@ export default function DigitalID({ registrant, digitalId, printable = false }) 
                         <p><span>Address</span>{address}</p>
                     </div>
                 </section>
+                <div className="id-admin-signature" aria-label="Municipal Head Agriculturist signature space">
+                    <span>Municipal Head Agriculturist</span>
+                </div>
                 <footer className="id-back-note">
                     <p>This ID is valid only with an active TARSIS registry record. Verify by scanning the QR code on the front.</p>
-                    <p>If found, please return to the Municipal Agriculture Office, Tubigon, Bohol.</p>
+                    <p>If found, please return to the Office of the Municipal Agriculturist, Tubigon, Bohol.</p>
                 </footer>
             </article>
-            {!printable && (
-                <div className="tarsis-id-actions mt-3 flex flex-wrap gap-2">
-                    <button className="mini-btn" type="button" onClick={() => window.print()}>Print</button>
-                    {registryNumber && (
-                        <Link className="mini-btn" to={`/rsbsa-preview/${encodeURIComponent(registryNumber)}`}>
-                            View RSBSA Form
-                        </Link>
-                    )}
-                    <button className="mini-btn" type="button" onClick={downloadQr}>Download QR</button>
-                </div>
-            )}
+            {!printable && (actionsContainer ? createPortal(actions, actionsContainer) : actions)}
         </div>
     );
 }

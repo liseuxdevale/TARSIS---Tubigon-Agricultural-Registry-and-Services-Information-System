@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { ShieldCheck, UsersRound } from 'lucide-react';
 import { agricultureOfficeTeam, leadershipTeam } from '../../data/aboutTarsis';
 
@@ -18,17 +18,19 @@ export default function TeamSection() {
                         <article key={`${person.name}-${person.position}`} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition duration-200 ease-out hover:scale-105 hover:shadow-lg">
                             <div className="aspect-[4/3] bg-[#e5efe9]">
                                 {person.photo ? (
-                                    <img src={person.photo} alt={person.name} className="h-full w-full object-cover" loading="lazy" />
+                                    <img src={person.photo} alt={person.name} className="h-full w-full object-cover object-[center_10%]" style={person.photoPosition ? { objectPosition: person.photoPosition } : undefined} loading="lazy" />
                                 ) : (
                                     <div className="flex h-full items-center justify-center text-[#1a4731]"><UsersRound className="h-9 w-9" aria-hidden="true" /></div>
                                 )}
                             </div>
                             <div className="p-4">
-                                <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#1a4731]">
-                                    <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                                    {person.pending ? 'Roster to be confirmed' : 'Official listing'}
+                                <div className="mb-2 flex min-h-3.5 items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#1a4731]" aria-hidden={person.pending ? undefined : true}>
+                                    {person.pending && <>
+                                        <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                                        Roster to be confirmed
+                                    </>}
                                 </div>
-                                <h3 className="text-sm font-extrabold leading-5 text-slate-950">{person.name}</h3>
+                                <StaffName name={person.name} />
                                 <p className="mt-1 text-xs leading-5 text-slate-500">{person.position}</p>
                             </div>
                         </article>
@@ -37,4 +39,28 @@ export default function TeamSection() {
             </div>
         </section>
     );
+}
+
+function StaffName({ name }) {
+    const headingRef = useRef(null);
+
+    useLayoutEffect(() => {
+        const heading = headingRef.current;
+        const fitName = () => {
+            heading.style.fontSize = '14px';
+            const availableWidth = heading.clientWidth;
+            if (availableWidth > 0 && heading.scrollWidth > availableWidth) {
+                heading.style.fontSize = `${14 * availableWidth / heading.scrollWidth}px`;
+            }
+        };
+        fitName();
+        const observer = new ResizeObserver(fitName);
+        observer.observe(heading);
+        document.fonts.ready.then(() => {
+            if (heading.isConnected) fitName();
+        });
+        return () => observer.disconnect();
+    }, [name]);
+
+    return <h3 ref={headingRef} className="min-h-10 whitespace-nowrap text-sm font-extrabold leading-5 text-slate-950">{name}</h3>;
 }

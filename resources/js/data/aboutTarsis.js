@@ -36,6 +36,7 @@ export const officeContacts = [
 export const leadershipTeam = [
     {
         name: 'HON. MARLON R. AMILA',
+        photoPosition: 'center 30%',
         position: 'Municipal Mayor',
         photo: 'https://tubigonbohol.gov.ph/wp-content/uploads/2025/11/1756597575003-scaled-e1762761813912.jpg',
     },
@@ -50,21 +51,21 @@ export const agricultureOfficeTeam = [
     {
         name: 'Engr. Razel Palma',
         position: 'Municipal Agriculturist',
-        photo: 'https://randomuser.me/api/portraits/women/68.jpg',
+        photo: '/images/razel-palma.jpg',
     },
     {
         name: 'Victor Boligao',
         position: 'Agriculture Technologist',
-        photo: 'https://randomuser.me/api/portraits/men/46.jpg',
+        photo: '/images/victor-boligao.jpg',
     },
     {
         name: 'Allene Mae T. Lebita',
         position: 'Agriculture Technologist',
-        photo: 'https://randomuser.me/api/portraits/women/44.jpg',
+        photo: '/images/allene-mae-lebita.jpg',
     },
     {
         name: 'Mabeth Anne A. Leguis',
         position: 'Agricultural Technologist',
-        photo: 'https://randomuser.me/api/portraits/women/65.jpg',
+        photo: '/images/mabeth-leguis.jpg',
     },
 ];

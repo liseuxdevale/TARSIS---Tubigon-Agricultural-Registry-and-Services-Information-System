@@ -42,7 +42,7 @@ function DigitalIdCard() {
     return (
         <div className="mx-auto w-full max-w-2xl rounded-lg border border-[#d8eadf] bg-[#f0f6f2] p-4 shadow-xl shadow-slate-950/10">
             <img
-                src="/images/tarsis-digital-id-card.png"
+                src="/images/tarsis-digital-id-preview-commodity.png"
                 alt="TARSIS digital ID card for farmers and fishers"
                 className="block w-full rounded-lg border border-[#1a4731]/15 bg-white object-cover"
             />

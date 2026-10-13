@@ -4,6 +4,8 @@ import { ArrowLeft, CalendarDays, CheckCircle2, Info, MapPin, Megaphone, Message
 import Footer from '../../components/landing/Footer';
 import Header from '../../components/landing/Header';
 import { api } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { formatDate } from '../../utils/format';
 import { announcementStatusLabel, announcementStatusLink, normalizeAnnouncement } from '../../utils/announcements';
 
 const tagTones = {
@@ -17,6 +19,8 @@ const tagTones = {
 
 export default function PublicAnnouncementDetails() {
     const { id } = useParams();
+    const { user } = useAuth();
+    const commentsPath = `/announcements/${id}/comments${user ? '/manage' : ''}`;
     const [announcement, setAnnouncement] = useState(null);
     const [comments, setComments] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -32,13 +36,13 @@ export default function PublicAnnouncementDetails() {
     }, [id]);
 
     useEffect(() => {
-        api.get(`/announcements/${id}/comments`)
+        api.get(commentsPath)
             .then((response) => setComments(response.data.data || []))
             .catch(() => setComments([]));
-    }, [id]);
+    }, [commentsPath]);
 
     const refreshComments = () => {
-        api.get(`/announcements/${id}/comments`)
+        api.get(commentsPath)
             .then((response) => setComments(response.data.data || []))
             .catch(() => setComments([]));
     };
@@ -189,6 +193,9 @@ export default function PublicAnnouncementDetails() {
 }
 
 function CommentSection({ announcementId, comments, onChanged }) {
+    const [search, setSearch] = useState('');
+    const matches = (comment) => `${comment.author_name} ${comment.body}`.toLowerCase().includes(search.toLowerCase()) || comment.replies?.some(matches);
+    const visible = comments.filter(matches);
     return (
         <section className="mt-10 rounded-lg border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
             <div className="mb-5 flex items-center gap-3">
@@ -202,14 +209,15 @@ function CommentSection({ announcementId, comments, onChanged }) {
             </div>
 
             <CommentForm announcementId={announcementId} onSaved={onChanged} />
+            <input className="field mt-4" aria-label="Search comments by name or message" placeholder="Search comments by name or message" value={search} onChange={(event) => setSearch(event.target.value)} />
 
             <div className="mt-8 space-y-5">
-                {comments.map((comment) => (
+                {visible.map((comment) => (
                     <CommentItem key={comment.id} announcementId={announcementId} comment={comment} onChanged={onChanged} />
                 ))}
-                {!comments.length && (
+                {!visible.length && (
                     <p className="rounded-lg bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
-                        Be the first to comment on this announcement.
+                        {search ? 'No matching comments.' : 'Be the first to comment on this announcement.'}
                     </p>
                 )}
             </div>
@@ -218,6 +226,7 @@ function CommentSection({ announcementId, comments, onChanged }) {
 }
 
 function CommentForm({ announcementId, parentId, onSaved, onCancel, compact = false }) {
+    const { user } = useAuth();
     const [authorName, setAuthorName] = useState('');
     const [body, setBody] = useState('');
     const [saving, setSaving] = useState(false);
@@ -229,8 +238,8 @@ function CommentForm({ announcementId, parentId, onSaved, onCancel, compact = fa
         setError('');
 
         try {
-            await api.post(`/announcements/${announcementId}/comments`, {
-                author_name: authorName,
+            await api.post(`/announcements/${announcementId}/comments${user ? '/authenticated' : ''}`, {
+                author_name: user?.name || authorName,
                 body,
                 parent_id: parentId,
             });
@@ -250,7 +259,9 @@ function CommentForm({ announcementId, parentId, onSaved, onCancel, compact = fa
             <div className="grid gap-3">
                 <input
                     className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm outline-none transition focus:border-[#1a4731] focus:ring-2 focus:ring-[#1a4731]/15"
-                    value={authorName}
+                    value={user?.name || authorName}
+                    readOnly={Boolean(user)}
+                    aria-label="Your name"
                     onChange={(event) => setAuthorName(event.target.value)}
                     placeholder="Your name"
                     maxLength={80}
@@ -261,6 +272,7 @@ function CommentForm({ announcementId, parentId, onSaved, onCancel, compact = fa
                     value={body}
                     onChange={(event) => setBody(event.target.value)}
                     placeholder={parentId ? 'Write a reply...' : 'Write a public comment...'}
+                    aria-label={parentId ? 'Reply message' : 'Comment message'}
                     maxLength={1000}
                     required
                 />
@@ -281,12 +293,33 @@ function CommentForm({ announcementId, parentId, onSaved, onCancel, compact = fa
 }
 
 function CommentItem({ announcementId, comment, onChanged }) {
+    const { user } = useAuth();
+    const [busy, setBusy] = useState(false);
+    const [feedback, setFeedback] = useState('');
+    const unavailable = comment.hidden || comment.removed;
+    async function manage(action) {
+        let body;
+        let reason;
+        if (action === 'edit') { body = window.prompt('Edit your comment', comment.body); if (!body?.trim()) return; }
+        if (action === 'hide' || action === 'report') { reason = window.prompt(action === 'hide' ? 'Reason for hiding this comment' : 'Reason for reporting this comment'); if (!reason?.trim()) return; }
+        if (action === 'delete' && !window.confirm('Delete your comment?')) return;
+        setBusy(true);
+        setFeedback('');
+        try {
+            const response = await api.post(`/announcements/${announcementId}/comments/${comment.id}/manage`, { action, body, reason });
+            setFeedback(response.data.message);
+            onChanged();
+        } catch (error) { setFeedback(error.message || 'Unable to update comment.'); }
+        finally { setBusy(false); }
+    }
     const [replying, setReplying] = useState(false);
-    const createdAt = comment.created_at ? new Date(comment.created_at).toLocaleDateString() : '';
+    const createdAt = comment.created_at ? formatDate(comment.created_at) : '';
 
     const react = async (reaction) => {
-        await api.post(`/announcements/${announcementId}/comments/${comment.id}/react`, { reaction });
-        onChanged();
+        setBusy(true);
+        try { await api.post(`/announcements/${announcementId}/comments/${comment.id}/react`, { reaction }); onChanged(); }
+        catch (error) { setFeedback(error.message || 'Unable to react.'); }
+        finally { setBusy(false); }
     };
 
     return (
@@ -294,9 +327,10 @@ function CommentItem({ announcementId, comment, onChanged }) {
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <h3 className="font-semibold text-slate-950">{comment.author_name}</h3>
+                    {comment.official && <span className="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-900">MAO Staff · Official</span>}
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{createdAt}</p>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1" inert={busy || unavailable ? true : undefined}>
                     <button type="button" className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-semibold text-slate-600 transition hover:bg-emerald-50 hover:text-[#1a4731]" onClick={() => react('like')}>
                         <ThumbsUp className="h-4 w-4" aria-hidden="true" />
                         {comment.likes_count || 0}
@@ -308,7 +342,13 @@ function CommentItem({ announcementId, comment, onChanged }) {
                 </div>
             </div>
             <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-700">{comment.body}</p>
-            <button type="button" className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg text-sm font-semibold text-[#1a4731] transition hover:opacity-75" onClick={() => setReplying((open) => !open)}>
+            <div className="mt-2 flex flex-wrap gap-2">
+                {comment.can_edit && <><button className="mini-btn" type="button" disabled={busy} onClick={() => manage('edit')}>Edit</button><button className="mini-btn text-red-700" type="button" disabled={busy} onClick={() => manage('delete')}>Delete</button></>}
+                {comment.can_moderate && <button className="mini-btn" type="button" disabled={busy} onClick={() => manage(comment.hidden ? 'restore' : 'hide')}>{comment.hidden ? 'Restore comment' : 'Hide comment'}</button>}
+                {user && !unavailable && <button className="mini-btn" type="button" disabled={busy} onClick={() => manage('report')}>Report comment</button>}
+            </div>
+            {feedback && <p role="status" className="mt-2 text-sm">{feedback}</p>}
+            <button type="button" disabled={unavailable || busy} className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg text-sm font-semibold text-[#1a4731] transition hover:opacity-75 disabled:opacity-50" onClick={() => setReplying((open) => !open)}>
                 <Reply className="h-4 w-4" aria-hidden="true" />
                 Reply
             </button>

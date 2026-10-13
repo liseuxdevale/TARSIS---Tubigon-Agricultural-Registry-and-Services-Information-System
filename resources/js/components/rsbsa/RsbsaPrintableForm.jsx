@@ -4,7 +4,7 @@ const educationOptions = ['Pre-school', 'Elementary', 'High School (non K-12)', 
 const civilStatusOptions = ['Single', 'Married', 'Widowed', 'Separated'];
 const farmerActivities = ['Rice', 'Corn', 'Other crops', 'Livestock', 'Poultry'];
 const farmworkerActivities = ['Land Preparation', 'Planting/Transplanting', 'Cultivation', 'Harvesting', 'Others'];
-const fishingActivities = ['Fish Capture', 'Aquaculture', 'Gleaning', 'Fish Processing', 'Fish Vending', 'Others'];
+const fishingActivities = ['Fish Capture', 'Aquaculture', 'Gleaning', 'Fish Processing', 'Fish Vending', 'FishR', 'BoatR', 'Others'];
 const youthActivities = ['Part of a farming household', 'Attending/attended formal agri-fishery related course', 'Attending/attended non-formal agri-fishery related course', 'Participated in any agricultural activity/program', 'Others'];
 
 export default function RsbsaPrintableForm({ registrant }) {
