@@ -22,7 +22,10 @@ class AuthController extends Controller
         ]);
 
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:120'],
+            'name' => ['required_without:first_name', 'string', 'max:120'],
+            'first_name' => ['required_without:name', 'string', 'max:120'],
+            'middle_name' => ['nullable', 'string', 'max:120'],
+            'last_name' => ['required_with:first_name', 'string', 'max:120'],
             'email' => ['required', 'email', Rule::unique('users')],
             'phone' => ['required', 'string', 'regex:/^09\d{9}$/', Rule::unique('users')],
             'password' => ['required', 'string', 'min:8', new StrongPassword, 'confirmed'],
@@ -32,8 +35,19 @@ class AuthController extends Controller
             'phone.unique' => 'This mobile number is already linked to an account.',
         ]);
 
+        $name = isset($data['first_name'])
+            ? implode(' ', array_filter([$data['first_name'], $data['middle_name'] ?? null, $data['last_name']], fn ($part) => $part !== null && $part !== ''))
+            : $data['name'];
+
+        if (mb_strlen($name) > 255) {
+            throw ValidationException::withMessages(['first_name' => 'The combined name must not exceed 255 characters.']);
+        }
+
         $user = User::create([
-            'name' => $data['name'],
+            'name' => $name,
+            'first_name' => $data['first_name'] ?? null,
+            'middle_name' => $data['middle_name'] ?? null,
+            'last_name' => $data['last_name'] ?? null,
             'email' => $data['email'],
             'phone' => $data['phone'] ?? null,
             'password' => Hash::make($data['password']),

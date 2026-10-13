@@ -24,12 +24,12 @@ const MAX_COMMODITIES_PER_PARCEL = 5;
 const emptyCommodity = () => ({ commodity: '', size: '', heads: '', farm_type: '', organic_practitioner: '', remarks: '' });
 const emptyParcel = () => ({
     location_barangay: '',
-    location_municipality: 'Tubigon',
+    location_municipality: '',
     total_area: '',
     ownership_document_number: '',
-    ancestral_domain: 'No',
-    agrarian_reform_beneficiary: 'No',
-    ownership_type: parcelOwnershipTypes[0],
+    ancestral_domain: '',
+    agrarian_reform_beneficiary: '',
+    ownership_type: '',
     owner_name: '',
     ownership_other: '',
     commodities: [emptyCommodity()],
@@ -38,7 +38,7 @@ const emptyParcel = () => ({
 const initialForm = {
     enrollment_type: 'New',
     reference_id: '',
-    date_administered: new Date().toISOString().slice(0, 10),
+    date_administered: localDate(),
     first_name: '',
     middle_name: '',
     last_name: '',
@@ -49,38 +49,38 @@ const initialForm = {
     address_line: '',
     street: '',
     barangay_id: '',
-    municipality: 'Tubigon',
-    province: 'Bohol',
-    region: 'Region VII',
+    municipality: '',
+    province: '',
+    region: '',
     phone: '',
     landline: '',
     email: '',
     birth_municipality: '',
     birth_province: '',
-    birth_country: 'Philippines',
+    birth_country: '',
     mother_maiden_name: '',
-    religion: 'Christianity',
+    religion: '',
     religion_other: '',
     education: '',
     pwd: '',
     spouse_name: '',
-    household_head: 'Yes',
+    household_head: '',
     household_head_name: '',
     household_relationship: '',
-    household_members: '1',
+    household_members: '',
     household_male: '',
     household_female: '',
     four_ps: '',
     indigenous_group: '',
     indigenous_specify: '',
-    government_id: 'No',
+    government_id: '',
     government_id_type: '',
     government_id_number: '',
-    association_member: 'No',
+    association_member: '',
     association_name: '',
     emergency_name: '',
     emergency_contact: '',
-    main_livelihood: ['Farmer'],
+    main_livelihood: [],
     farmer_activities: [],
     farmer_other: '',
     farmer_livestock: '',
@@ -126,17 +126,29 @@ export default function Register() {
     const barangayScoped = isBarangayScoped(user);
     const scopedBarangayIds = useMemo(() => assignedBarangayIds(user), [user]);
     const scopedBarangayKey = scopedBarangayIds.join(',');
+    const draftKey = user?.id ? `rsbsa-registration-draft:${user.id}` : null;
+    const [loadedDraftKey, setLoadedDraftKey] = useState(null);
 
     useEffect(() => {
-        const draft = localStorage.getItem('rsbsa-registration-draft');
-        if (! draft) return;
+        if (!draftKey) return;
+        const names = !isStaff ? user.name?.trim().split(/\s+/) || [] : [];
+        let next = normalizeForm({
+            ...initialForm,
+            first_name: !isStaff ? user.first_name ?? names[0] ?? '' : '',
+            middle_name: !isStaff ? user.middle_name || '' : '',
+            last_name: !isStaff ? user.last_name ?? names.slice(1).join(' ') : '',
+            phone: !isStaff ? user.phone || '' : '',
+            email: !isStaff ? user.email || '' : '',
+        });
+        const draft = localStorage.getItem(draftKey);
         try {
-            const parsed = JSON.parse(draft);
-            setForm((current) => normalizeForm({ ...current, ...parsed, parcels: parsed.parcels?.length ? parsed.parcels : current.parcels }));
+            if (draft) next = normalizeForm({ ...next, ...JSON.parse(draft) });
         } catch {
-            localStorage.removeItem('rsbsa-registration-draft');
+            localStorage.removeItem(draftKey);
         }
-    }, []);
+        setForm(next);
+        setLoadedDraftKey(draftKey);
+    }, [draftKey, isStaff]);
 
     useEffect(() => {
         setBarangaysLoading(true);
@@ -160,18 +172,6 @@ export default function Register() {
             })
             .finally(() => setBarangaysLoading(false));
     }, [barangayScoped, scopedBarangayKey]);
-
-    useEffect(() => {
-        if (! user || isStaff) return;
-        const names = user.name?.trim().split(/\s+/) || [];
-        setForm((current) => normalizeForm({
-            ...current,
-            first_name: names[0] || current.first_name,
-            last_name: names.slice(1).join(' ') || current.last_name,
-            phone: user.phone || current.phone,
-            email: user.email || current.email,
-        }));
-    }, [user, isStaff]);
 
     useEffect(() => {
         if (!isBeneficiaryUser) return undefined;
@@ -204,11 +204,13 @@ export default function Register() {
         return () => {
             active = false;
         };
-    }, [isBeneficiaryUser]);
+    }, [isBeneficiaryUser, draftKey]);
 
     useEffect(() => {
-        localStorage.setItem('rsbsa-registration-draft', JSON.stringify(form));
-    }, [form]);
+        if (draftKey && loadedDraftKey === draftKey) {
+            localStorage.setItem(draftKey, JSON.stringify(form));
+        }
+    }, [form, draftKey, loadedDraftKey]);
 
     useEffect(() => {
         if (form.enrollment_type !== 'Updating' || isBeneficiaryUser || (barangayScoped && !barangayConfirmed)) {
@@ -374,8 +376,9 @@ export default function Register() {
             enrollment_type: 'New',
             date_administered: current.date_administered || initialForm.date_administered,
             barangay_id: barangayScoped ? current.barangay_id : '',
-            first_name: accountNames[0] || '',
-            last_name: accountNames.slice(1).join(' '),
+            first_name: !isStaff ? user?.first_name ?? accountNames[0] ?? '' : '',
+            middle_name: !isStaff ? user?.middle_name || '' : '',
+            last_name: !isStaff ? user?.last_name ?? accountNames.slice(1).join(' ') : '',
             phone: !isStaff ? user?.phone || '' : '',
             email: !isStaff ? user?.email || '' : '',
         }));
@@ -451,6 +454,11 @@ export default function Register() {
         event?.preventDefault();
         if (busy) return;
         setSubmitError('');
+        if (!selectedLivelihoods.length) {
+            setSubmitError('Select at least one main livelihood.');
+            document.getElementById('livelihood')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            return;
+        }
         const missingActivities = selectedActivityGroups.find(([field]) => !form[field]?.length);
         if (missingActivities) {
             setSubmitError(`Select at least one activity for ${missingActivities[3]}.`);
@@ -464,6 +472,7 @@ export default function Register() {
         const selectedBarangay = barangays.find((row) => String(row.id) === String(barangayId));
         const rsbsaPayload = cleanRsbsaPayload({
             ...form,
+            date_administered: localDate(),
             barangay_name: selectedBarangay?.name || '',
             channel: isStaff ? 'staff_encoded' : 'online_registration',
             form_revision: '03-2021',
@@ -505,7 +514,7 @@ export default function Register() {
             const response = updatesExistingRegistrant
                 ? await api.post(`/registrants/${referenceRegistrant.id}`, body, { headers: { 'Content-Type': undefined } })
                 : await api.post('/registrants', body, { headers: { 'Content-Type': undefined } });
-            localStorage.removeItem('rsbsa-registration-draft');
+            if (draftKey) localStorage.removeItem(draftKey);
             setSaved(response.data);
             navigate(`/rsbsa-preview/${response.data.registry_number}`);
         } catch (error) {
@@ -594,7 +603,7 @@ export default function Register() {
                 <PortalHeader form={form} />
                 <ModernSection id="reference" title="Reference Information">
                     <Field label="Registry Number"><input className="field" disabled value="Generated after submission" /></Field>
-                    <Field label="Date Administered" required><input required type="date" className="field" value={form.date_administered} onChange={(event) => update('date_administered', event.target.value)} /></Field>
+                    <Field label="Date Administered" required><input required readOnly type="date" className="field" value={form.date_administered} /></Field>
                     <RadioGroup
                         label="Enrollment Type"
                         name="enrollment_type"
@@ -651,7 +660,7 @@ export default function Register() {
                     <Field label="Birth Country"><input className="field" value={form.birth_country} onChange={(event) => update('birth_country', event.target.value)} /></Field>
                     <Field label="Mother's Maiden Name"><input className="field" value={form.mother_maiden_name} onChange={(event) => update('mother_maiden_name', event.target.value)} /></Field>
                     <Field label="Civil Status"><select className="field" value={form.civil_status} onChange={(event) => update('civil_status', event.target.value)}><option value="">Select</option>{['Single', 'Married', 'Widowed', 'Separated'].map((value) => <option key={value}>{value}</option>)}</select></Field>
-                    <Field label="Religion" required><select required className="field" value={form.religion} onChange={(event) => update('religion', event.target.value)}><option>Christianity</option><option>Islam</option><option>Others</option></select></Field>
+                    <Field label="Religion" required><select required className="field" value={form.religion} onChange={(event) => update('religion', event.target.value)}><option value="">Select religion</option><option>Christianity</option><option>Islam</option><option>Others</option></select></Field>
                     {form.religion === 'Others' && <Field label="Other Religion" required><input required className="field" value={form.religion_other} onChange={(event) => update('religion_other', event.target.value)} /></Field>}
                     <Field label="Education" required><select required className="field" value={form.education} onChange={(event) => update('education', event.target.value)}><option value="">Select</option>{educationOptions.map((value) => <option key={value}>{value}</option>)}</select></Field>
                     <YesNoField label="Person with Disability (PWD)" name="pwd" form={form} update={update} />
@@ -668,16 +677,18 @@ export default function Register() {
                         </select>
                     </Field>
                     <Field label="Municipality" required>
-                        <select required disabled className="field" value={form.municipality} onChange={(event) => update('municipality', event.target.value)}>
+                        <select required className="field" value={form.municipality} onChange={(event) => update('municipality', event.target.value)}>
+                            <option value="">Select municipality</option>
                             {municipalityOptions.map((value) => <option key={value} value={value}>{value}</option>)}
                         </select>
                     </Field>
                     <Field label="Province" required>
-                        <select required disabled className="field" value={form.province} onChange={(event) => update('province', event.target.value)}>
+                        <select required className="field" value={form.province} onChange={(event) => update('province', event.target.value)}>
+                            <option value="">Select province</option>
                             {provinceOptions.map((value) => <option key={value} value={value}>{value}</option>)}
                         </select>
                     </Field>
-                    <Field label="Region" required><input required disabled className="field" value={form.region} onChange={(event) => update('region', event.target.value)} /></Field>
+                    <Field label="Region" required><select required className="field" value={form.region} onChange={(event) => update('region', event.target.value)}><option value="">Select region</option><option>Region VII</option></select></Field>
                 </ModernSection>
 
                 <ModernSection id="contact" title="Contact Information">
@@ -934,9 +945,9 @@ function livelihoodForSector(sector) {
 }
 
 function selectedMainLivelihoods(value) {
-    const values = Array.isArray(value) ? value : [value || 'Farmer'];
+    const values = Array.isArray(value) ? value : [value];
     const selected = values.filter((item) => livelihoodOptions.includes(item));
-    return selected.length ? selected : ['Farmer'];
+    return selected;
 }
 
 function parcelFromRegistrant(registrant) {
@@ -953,7 +964,7 @@ function parcelFromRegistrant(registrant) {
 }
 
 function ownershipForForm(value) {
-    return parcelOwnershipTypes.includes(value) ? value : parcelOwnershipTypes[0];
+    return parcelOwnershipTypes.includes(value) ? value : value ? parcelOwnershipTypes[0] : '';
 }
 
 function findMatchingRegistrant(rows, search) {
@@ -1036,7 +1047,7 @@ function LivelihoodCards({ value, onChange }) {
         const next = selected.includes(option)
             ? selected.filter((item) => item !== option)
             : [...selected, option];
-        onChange(next.length ? next : selected);
+        onChange(next);
     }
 
     return (
@@ -1087,7 +1098,7 @@ function ParcelCard({ parcel, parcelIndex, barangays, canRemove, updateParcel, u
                 <Field label="Municipality" required><input required className="field" value={parcel.location_municipality} onChange={(event) => updateParcel(parcelIndex, 'location_municipality', event.target.value)} /></Field>
                 <Field label="Total Area" required><input required min="0.01" step="0.01" type="number" className="field" value={parcel.total_area} onChange={(event) => updateParcel(parcelIndex, 'total_area', decimalValue(event.target.value))} /></Field>
                 <Field label="Ownership Document No."><input className="field" value={parcel.ownership_document_number} onChange={(event) => updateParcel(parcelIndex, 'ownership_document_number', event.target.value)} /></Field>
-                <Field label="Ownership Type" required><select required className="field" value={parcel.ownership_type} onChange={(event) => updateParcel(parcelIndex, 'ownership_type', event.target.value)}>{parcelOwnershipTypes.map((option) => <option key={option}>{option}</option>)}</select></Field>
+                <Field label="Ownership Type" required><select required className="field" value={parcel.ownership_type} onChange={(event) => updateParcel(parcelIndex, 'ownership_type', event.target.value)}><option value="">Select ownership type</option>{parcelOwnershipTypes.map((option) => <option key={option}>{option}</option>)}</select></Field>
                 {['Tenant', 'Lessee'].includes(parcel.ownership_type) && <Field label="Land Owner Name" required><input required className="field" value={parcel.owner_name} onChange={(event) => updateParcel(parcelIndex, 'owner_name', event.target.value)} /></Field>}
                 {parcel.ownership_type === 'Others' && <Field label="Specify Ownership" required><input required className="field" value={parcel.ownership_other} onChange={(event) => updateParcel(parcelIndex, 'ownership_other', event.target.value)} /></Field>}
                 <YesNoField label="Agrarian Reform" name={`arb-${parcelIndex}`} value={parcel.agrarian_reform_beneficiary} onChange={(next) => updateParcel(parcelIndex, 'agrarian_reform_beneficiary', next)} required />
@@ -1191,18 +1202,13 @@ function normalizeForm(next) {
     });
 
     normalized.enrollment_type = normalized.enrollment_type || 'New';
-    normalized.date_administered = normalized.date_administered || initialForm.date_administered;
-    normalized.municipality = normalized.municipality || 'Tubigon';
-    normalized.province = normalized.province || 'Bohol';
-    normalized.region = normalized.region || 'Region VII';
-    normalized.birth_country = normalized.birth_country || 'Philippines';
-    normalized.religion = normalized.religion || 'Christianity';
-    normalized.household_head = yesNoValue(normalized.household_head) === 'Yes' ? 'Yes' : 'No';
+    normalized.date_administered = localDate();
+    normalized.household_head = yesNoValue(normalized.household_head, '');
     normalized.pwd = yesNoValue(normalized.pwd, '');
     normalized.four_ps = yesNoValue(normalized.four_ps, '');
     normalized.indigenous_group = yesNoValue(normalized.indigenous_group, '');
-    normalized.government_id = yesNoValue(normalized.government_id);
-    normalized.association_member = yesNoValue(normalized.association_member);
+    normalized.government_id = yesNoValue(normalized.government_id, '');
+    normalized.association_member = yesNoValue(normalized.association_member, '');
     normalized.main_livelihood = selectedMainLivelihoods(normalized.main_livelihood);
 
     return normalized;
@@ -1219,11 +1225,11 @@ function normalizeParcels(parcels) {
         ...emptyParcel(),
         ...parcel,
         location_barangay: stringValue(parcel.location_barangay),
-        location_municipality: stringValue(parcel.location_municipality || 'Tubigon'),
+        location_municipality: stringValue(parcel.location_municipality),
         total_area: decimalValue(parcel.total_area),
         ownership_document_number: stringValue(parcel.ownership_document_number),
-        ancestral_domain: yesNoValue(parcel.ancestral_domain),
-        agrarian_reform_beneficiary: yesNoValue(parcel.agrarian_reform_beneficiary),
+        ancestral_domain: yesNoValue(parcel.ancestral_domain, ''),
+        agrarian_reform_beneficiary: yesNoValue(parcel.agrarian_reform_beneficiary, ''),
         ownership_type: ownershipForForm(parcel.ownership_type),
         owner_name: stringValue(parcel.owner_name),
         ownership_other: stringValue(parcel.ownership_other),
@@ -1245,6 +1251,11 @@ function normalizeCommodities(commodities) {
 
 function stringValue(value) {
     return value === null || value === undefined ? '' : String(value);
+}
+
+function localDate() {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 }
 
 function decimalValue(value) {

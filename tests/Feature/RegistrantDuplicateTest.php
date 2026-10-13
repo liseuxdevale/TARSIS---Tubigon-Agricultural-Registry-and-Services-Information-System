@@ -46,6 +46,31 @@ class RegistrantDuplicateTest extends TestCase
         ], $overrides));
     }
 
+    public function test_admin_address_edits_are_visible_in_the_beneficiary_rsbsa_record(): void
+    {
+        $registrant = $this->record(['rsbsa_payload' => [
+            'address_line' => 'Old house', 'street' => 'Main Street',
+            'municipality' => 'Tubigon', 'province' => 'Bohol', 'region' => 'Region VII',
+            'religion' => 'Christianity',
+        ]]);
+
+        $this->putJson('/api/registrants/'.$registrant->id, [
+            'rsbsa_payload' => ['address_line' => 'New house', 'parcels' => [['commodities' => [['commodity' => 'Rice']]]]],
+            'middle_name' => 'Updated',
+        ])->assertOk()
+            ->assertJsonPath('address', 'New house, Main Street, Tubigon, Bohol, Region VII')
+            ->assertJsonPath('rsbsa_payload.address_line', 'New house')
+            ->assertJsonPath('rsbsa_payload.middle_name', 'Updated');
+
+        $beneficiary = User::factory()->create(['email' => 'maria@example.test', 'role' => 'farmer', 'status' => 'active']);
+        $this->withToken(app(JwtService::class)->issue($beneficiary))
+            ->getJson('/api/tracking/me')->assertOk()
+            ->assertJsonPath('registrant.id', $registrant->id)
+            ->assertJsonPath('registrant.rsbsa_payload.address_line', 'New house')
+            ->assertJsonPath('registrant.rsbsa_payload.street', 'Main Street')
+            ->assertJsonPath('registrant.rsbsa_payload.religion', 'Christianity');
+    }
+
     public function test_archiving_selected_duplicate_leaves_other_record_active(): void
     {
         $selected = $this->record();

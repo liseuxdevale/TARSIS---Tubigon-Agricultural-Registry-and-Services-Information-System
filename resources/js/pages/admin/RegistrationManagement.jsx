@@ -497,6 +497,10 @@ function RegistrantActionModal({ modal, barangays, user, onClose, onSaved, onApp
             farm_area: form.farm_area || null,
             expected_production: parseKeyValue(form.expected_text),
         };
+        if (form.rsbsa_payload) {
+            payload.address = ['address_line', 'street', 'municipality', 'province', 'region']
+                .map((key) => form.rsbsa_payload[key]).filter(Boolean).join(', ');
+        }
         if (scoped) delete payload.status;
         if (reviewToken) payload.duplicate_review_token = reviewToken;
         try {
@@ -536,7 +540,13 @@ function RegistrantActionModal({ modal, barangays, user, onClose, onSaved, onApp
                 <Field label="Livestock Type"><input className="field" value={form.livestock_type || ''} onChange={(event) => update('livestock_type', event.target.value)} /></Field>
                 <Field label="Poultry Type"><input className="field" value={form.poultry_type || ''} onChange={(event) => update('poultry_type', event.target.value)} /></Field>
                 <Field label="Expected Produce/Catch" wide><input className="field" value={form.expected_text || ''} onChange={(event) => update('expected_text', event.target.value)} /></Field>
-                <Field label="Address" wide><textarea required className="field min-h-20" value={form.address || ''} onChange={(event) => update('address', event.target.value)} /></Field>
+                {form.rsbsa_payload ? (
+                    ['address_line', 'street', 'municipality', 'province', 'region'].map((key) => (
+                        <Field key={key} label={{ address_line: 'House/Lot Number', street: 'Street', municipality: 'Municipality', province: 'Province', region: 'Region' }[key]}>
+                            <input required={key !== 'street'} className="field" value={form.rsbsa_payload[key] || ''} onChange={(event) => update('rsbsa_payload', { ...form.rsbsa_payload, [key]: event.target.value })} />
+                        </Field>
+                    ))
+                ) : <Field label="Address" wide><textarea required className="field min-h-20" value={form.address || ''} onChange={(event) => update('address', event.target.value)} /></Field>}
                 <div className="flex justify-end gap-2 md:col-span-2">
                     <button className="btn-secondary" type="button" onClick={onClose}>Cancel</button>
                     <button className="btn-primary" disabled={saveBusy}>{saveBusy ? 'Saving...' : 'Save changes'}</button>

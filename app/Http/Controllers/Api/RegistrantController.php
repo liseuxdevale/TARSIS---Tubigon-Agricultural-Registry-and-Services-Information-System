@@ -258,6 +258,23 @@ class RegistrantController extends Controller
                     unset($data['registry_number']);
                 }
                 unset($data['photo'], $data['duplicate_review_token']);
+                if ($registrant->rsbsa_payload || !empty($data['rsbsa_payload'])) {
+                    $payload = array_replace($registrant->rsbsa_payload ?? [], $data['rsbsa_payload'] ?? []);
+                    foreach (['first_name', 'middle_name', 'last_name', 'suffix', 'birthday', 'sex', 'civil_status', 'phone', 'email', 'barangay_id'] as $field) {
+                        if (array_key_exists($field, $data)) {
+                            $payload[$field] = $data[$field];
+                        }
+                    }
+                    if (array_key_exists('barangay_id', $data)) {
+                        $payload['barangay_name'] = \App\Models\Barangay::find($data['barangay_id'])?->name;
+                    }
+                    $addressFields = ['address_line', 'street', 'municipality', 'province', 'region'];
+                    $addressChanged = collect($addressFields)->contains(fn ($field) => ($payload[$field] ?? null) !== ($registrant->rsbsa_payload[$field] ?? null));
+                    if ($addressChanged) {
+                        $data['address'] = implode(', ', array_filter(array_map(fn ($field) => $payload[$field] ?? null, $addressFields), fn ($value) => $value !== null && $value !== ''));
+                    }
+                    $data['rsbsa_payload'] = $payload;
+                }
                 $registrant->update($data);
                 $audit->log($request, 'registrant.updated', $registrant, $old, $registrant->fresh()->toArray());
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, FileCheck2 } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { StatusBadge } from '../../components/common';
 import { api } from '../../services/api';
 import { formatDate } from '../../utils/format';
@@ -12,7 +12,7 @@ const guides = {
         steps: [
             'Create a beneficiary account and complete your RSBSA registration.',
             'Open this tracker using the same signed-in account as your registration.',
-            'Click the status button to load the applications linked to your account.',
+            'Applications linked to your account appear automatically below.',
             'Review each assistance record and contact the MAO when a requirement or remark needs action.',
         ],
         stages: ['Submitted', 'Under validation', 'Approved', 'Released'],
@@ -37,15 +37,15 @@ export default function TrackerGuide({ kind }) {
     const guide = guides[kind];
     const [record, setRecord] = useState(null);
     const [error, setError] = useState('');
-    const [busy, setBusy] = useState(false);
+    const [busy, setBusy] = useState(true);
     const [accountChecked, setAccountChecked] = useState(false);
-    const [statusVisible, setStatusVisible] = useState(false);
 
-    function loadTrackingProfile({ reveal = false } = {}) {
+    useEffect(() => {
         let active = true;
         setBusy(true);
         setError('');
-        if (reveal) setStatusVisible(true);
+        setRecord(null);
+        setAccountChecked(false);
 
         api.get('/tracking/me')
             .then((response) => {
@@ -64,15 +64,7 @@ export default function TrackerGuide({ kind }) {
             });
 
         return () => { active = false; };
-    }
-
-    useEffect(() => {
-        return loadTrackingProfile();
     }, [kind]);
-
-    function checkStatus() {
-        loadTrackingProfile({ reveal: true });
-    }
 
     const records = record?.[guide.recordsKey] || [];
 
@@ -122,30 +114,17 @@ export default function TrackerGuide({ kind }) {
 
                 <section className="rounded-lg bg-[#f2f6f4] p-5 sm:p-7">
                     <div className="mx-auto max-w-screen-lg">
-                        {statusVisible && accountChecked && !record && !error && (
+                        {busy && <p role="status" className="rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">Loading your {kind === 'assistance' ? 'assistance applications' : 'insurance claims'}...</p>}
+                        {!busy && error && <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
+                        {!busy && accountChecked && !record && !error && (
                             <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-center">
                                 <h2 className="font-bold text-amber-900">No registration found</h2>
                                 <p className="mt-1 text-sm text-amber-800">You have not completed a beneficiary registration with this account yet.</p>
                             </div>
                         )}
-                        <div className="rounded-lg border border-[#d4e5db] bg-white p-5 shadow-sm sm:p-7">
-                            <div className="flex items-start gap-3">
-                                <FileCheck2 className="mt-0.5 h-6 w-6 shrink-0 text-[#1a4731]" aria-hidden="true" />
-                                <div>
-                                    <h2 className="text-xl font-bold text-slate-950">Check your status</h2>
-                                    <p className="mt-1 text-sm leading-6 text-slate-500">Your registration is loaded automatically from your signed-in account.</p>
-                                </div>
-                            </div>
-                            <div className="mt-6 flex justify-center">
-                                <button type="button" className="btn-primary min-h-11 px-6" disabled={busy} onClick={checkStatus}>
-                                    {busy ? 'Checking...' : 'Check status'}
-                                </button>
-                            </div>
-                            {statusVisible && error && <p className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
-                        </div>
 
-                        {statusVisible && record && (
-                            <div className="mt-6">
+                        {!busy && !error && record && (
+                            <div>
                                 <div className="mb-4">
                                     <div>
                                         <p className="text-sm font-bold text-slate-950">{record.full_name}</p>

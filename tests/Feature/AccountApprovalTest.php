@@ -12,6 +12,51 @@ class AccountApprovalTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_signup_preserves_separate_name_parts(): void
+    {
+        $response = $this->postJson('/api/auth/register', [
+            'first_name' => 'Juan Carlo',
+            'middle_name' => 'Santos',
+            'last_name' => 'Dela Cruz',
+            'email' => 'juan@example.test',
+            'phone' => '09171234567',
+            'password' => 'password123!',
+            'password_confirmation' => 'password123!',
+        ])->assertCreated()
+            ->assertJsonPath('user.name', 'Juan Carlo Santos Dela Cruz')
+            ->assertJsonPath('user.first_name', 'Juan Carlo')
+            ->assertJsonPath('user.middle_name', 'Santos')
+            ->assertJsonPath('user.last_name', 'Dela Cruz');
+
+        $this->withToken($response->json('access_token'))->getJson('/api/auth/me')
+            ->assertOk()->assertJsonPath('first_name', 'Juan Carlo')
+            ->assertJsonPath('middle_name', 'Santos')->assertJsonPath('last_name', 'Dela Cruz');
+    }
+
+    public function test_signup_allows_no_middle_name(): void
+    {
+        $this->postJson('/api/auth/register', [
+            'first_name' => 'Maria',
+            'last_name' => 'Dela Cruz',
+            'email' => 'maria@example.test',
+            'phone' => '09171234567',
+            'password' => 'password123!',
+            'password_confirmation' => 'password123!',
+        ])->assertCreated()->assertJsonPath('user.name', 'Maria Dela Cruz')
+            ->assertJsonPath('user.middle_name', null);
+    }
+
+    public function test_signup_requires_last_name_when_first_name_is_provided(): void
+    {
+        $this->postJson('/api/auth/register', [
+            'first_name' => 'Maria',
+            'email' => 'maria@example.test',
+            'phone' => '09171234567',
+            'password' => 'password123!',
+            'password_confirmation' => 'password123!',
+        ])->assertUnprocessable()->assertJsonValidationErrors('last_name');
+    }
+
     public function test_public_signup_creates_and_authenticates_a_beneficiary_account(): void
     {
         $this->postJson('/api/auth/register', [

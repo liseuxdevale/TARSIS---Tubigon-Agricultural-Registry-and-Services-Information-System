@@ -11,7 +11,9 @@ export default function SignUp() {
     const location = useLocation();
     const intended = location.state?.from?.pathname || '/registration';
     const [form, setForm] = useState({
-        name: '',
+        first_name: '',
+        middle_name: '',
+        last_name: '',
         email: '',
         phone: '',
         password: '',
@@ -22,7 +24,8 @@ export default function SignUp() {
     const [busy, setBusy] = useState(false);
 
     const canSubmit = useMemo(
-        () => form.name.trim()
+        () => form.first_name.trim()
+            && form.last_name.trim()
             && form.email.trim()
             && form.phone.trim()
             && form.password
@@ -40,7 +43,8 @@ export default function SignUp() {
 
     function validate() {
         const next = {};
-        if (!form.name.trim()) next.name = 'Full name is required.';
+        if (!form.first_name.trim()) next.first_name = 'First name is required.';
+        if (!form.last_name.trim()) next.last_name = 'Last name is required.';
         if (!form.email.trim()) next.email = 'Email is required.';
         else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = 'Enter a valid email address.';
         if (!form.phone.trim()) next.phone = 'Mobile number is required.';
@@ -60,7 +64,9 @@ export default function SignUp() {
         setServerError('');
         try {
             await register({
-                name: form.name.trim(),
+                first_name: form.first_name.trim(),
+                middle_name: form.middle_name.trim(),
+                last_name: form.last_name.trim(),
                 email: form.email.trim(),
                 phone: normalizePhone(form.phone),
                 password: form.password,
@@ -92,8 +98,14 @@ export default function SignUp() {
                     <form onSubmit={submit} className="space-y-4" noValidate>
                         {serverError && <Alert tone="error">{serverError}</Alert>}
                         <div className="grid gap-4 md:grid-cols-2">
-                            <AuthField label="Full name" error={errors.name}>
-                                <input className={fieldClass(errors.name)} value={form.name} onChange={(event) => update('name', event.target.value)} autoComplete="name" placeholder="Juan Dela Cruz" />
+                            <AuthField label="First name" error={errors.first_name}>
+                                <input required maxLength={120} className={fieldClass(errors.first_name)} value={form.first_name} onChange={(event) => update('first_name', event.target.value)} autoComplete="given-name" placeholder="Juan" />
+                            </AuthField>
+                            <AuthField label="Last name" error={errors.last_name}>
+                                <input required maxLength={120} className={fieldClass(errors.last_name)} value={form.last_name} onChange={(event) => update('last_name', event.target.value)} autoComplete="family-name" placeholder="Dela Cruz" />
+                            </AuthField>
+                            <AuthField label="Middle name (optional)" error={errors.middle_name}>
+                                <input maxLength={120} className={fieldClass(errors.middle_name)} value={form.middle_name} onChange={(event) => update('middle_name', event.target.value)} autoComplete="additional-name" placeholder="Santos" />
                             </AuthField>
                             <AuthField label="Email address" error={errors.email}>
                                 <input className={fieldClass(errors.email)} value={form.email} onChange={(event) => update('email', event.target.value)} autoComplete="email" inputMode="email" placeholder="name@example.com" />
