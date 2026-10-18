@@ -1,15 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import MaoSeal from '../../components/landing/MaoSeal';
 import { useAuth } from '../../contexts/AuthContext';
-import { sectorAdminRoles } from '../../utils/rbac';
 
 export default function SignIn() {
     const { signedIn, loading, login, user } = useAuth();
     const navigate = useNavigate();
-    const location = useLocation();
-    const intended = location.state?.from?.pathname;
     const [form, setForm] = useState({ email: '', password: '' });
     const [errors, setErrors] = useState({});
     const [serverError, setServerError] = useState('');
@@ -17,7 +14,7 @@ export default function SignIn() {
     const [showPassword, setShowPassword] = useState(false);
     const canSubmit = useMemo(() => form.email.trim() && form.password, [form]);
 
-    if (!loading && signedIn) return <Navigate to={homePath(user, intended)} replace />;
+    if (!loading && signedIn) return <Navigate to={homePath(user)} replace />;
 
     function update(name, value) {
         setForm((current) => ({ ...current, [name]: value }));
@@ -42,8 +39,9 @@ export default function SignIn() {
         setServerError('');
         try {
             const signedInUser = await login(form.email.trim(), form.password);
-            navigate(homePath(signedInUser, intended), { replace: true });
+            navigate(homePath(signedInUser), { replace: true });
         } catch (err) {
+            setForm((current) => ({ ...current, password: '' }));
             setServerError(err.message || 'Unable to log in. Please check your credentials.');
         } finally {
             setBusy(false);
@@ -174,14 +172,10 @@ export function fieldClass(error) {
 
 export const authButtonClass = 'flex min-h-12 w-full items-center justify-center rounded-xl bg-green-700 px-4 py-3 text-base font-bold text-white shadow-sm transition-colors hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-700/30 disabled:cursor-not-allowed disabled:opacity-60';
 
-function homePath(user, intended) {
+function homePath(user) {
     if (user?.must_change_password) {
         return '/change-password';
     }
 
-    if (sectorAdminRoles.includes(user?.role)) {
-        return '/dashboard';
-    }
-
-    return intended || '/dashboard';
+    return '/dashboard';
 }

@@ -137,8 +137,13 @@ export default function DigitalID({ registrant, digitalId, printable = false, ac
                         <p><span>Address</span>{address}</p>
                     </div>
                 </section>
-                <div className="id-admin-signature" aria-label="Municipal Head Agriculturist signature space">
-                    <span>Municipal Head Agriculturist</span>
+                <div className="id-admin-signatures">
+                    <div className="id-admin-signature" aria-label="Municipal Head Agriculturist signature space">
+                        <span>Municipal Head Agriculturist</span>
+                    </div>
+                    <div className="id-admin-signature" aria-label="Municipal Mayor signature space">
+                        <span>Municipal Mayor</span>
+                    </div>
                 </div>
                 <footer className="id-back-note">
                     <p>This ID is valid only with an active TARSIS registry record. Verify by scanning the QR code on the front.</p>
